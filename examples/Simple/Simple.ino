@@ -1,70 +1,118 @@
-/* Using the WebDAV server
-	From windows - 
+/*  Using the WebDAV server
+	From windows -
 		Run: \\HOSTNAME\DavWWWRoot
 		or Map Network Drive -> Connect to a Website
 */
 
 #include <ESP8266WiFi.h>
+#include <LittleFS.h>
 #include <ESPWebDAV.h>
 
 #define HOSTNAME	"ESPWebDAV"
-#define SERVER_PORT	80
 #define SD_CS		15
 
+#ifndef STASSID
+#define STASSID "ssid"
+#define STAPSK "psk"
+#endif
 
-const char *ssid = 		"ssid";
-const char *password = 	"passwd";
+//FS& gfs = SPIFFS;
+FS& gfs = LittleFS;
+//FS& gfs = SDFS;
+
+//WiFiServerSecure tcp(443);
+WiFiServer tcp(80);
 
 ESPWebDAV dav;
+
+
 String statusMessage;
 bool initFailed = false;
 
 
 // ------------------------
-void setup() {
-// ------------------------
-	WiFi.mode(WIFI_STA);
-	WiFi.setPhyMode(WIFI_PHY_MODE_11N);
-	WiFi.hostname(HOSTNAME);
-	delay(1000);
-	Serial.begin(115200);
-	WiFi.begin(ssid, password);
-	Serial.println("");
+void setup()
+{
+    // ------------------------
+    WiFi.persistent(false);
+    WiFi.hostname(HOSTNAME);
+    WiFi.mode(WIFI_STA);
+    Serial.begin(115200);
+    WiFi.begin(STASSID, STAPSK);
+    Serial.println("Connecting to " STASSID " ...");
 
-	// Wait for connection
-	while(WiFi.status() != WL_CONNECTED) {
-		delay(500);
-		Serial.print(".");
-	}
+    // Wait for connection
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(500);
+        Serial.print(".");
+    }
 
-	Serial.println("");
-	Serial.print("Connected to "); Serial.println(ssid);
-	Serial.print ("IP address: "); Serial.println(WiFi.localIP());
-	Serial.print ("RSSI: "); Serial.println(WiFi.RSSI());
-	Serial.print ("Mode: "); Serial.println(WiFi.getPhyMode());
-	
-	// start the SD DAV server
-	if(!dav.init(SD_CS, SPI_FULL_SPEED, SERVER_PORT))		{
-		statusMessage = "Failed to initialize SD Card";
-		Serial.print("ERROR: "); Serial.println(statusMessage);
-		initFailed = true;
-	}
+    Serial.println("");
+    Serial.print("Connected to "); Serial.println(STASSID);
+    Serial.print("IP address: "); Serial.println(WiFi.localIP());
+    Serial.print("RSSI: "); Serial.println(WiFi.RSSI());
+    Serial.print("Mode: "); Serial.println(WiFi.getPhyMode());
 
-	Serial.println("WebDAV server started");
+    gfs.begin();
+    tcp.begin();
+    dav.begin(&tcp, &gfs);
+
+    Serial.println("WebDAV server started");
 }
 
 
+int listDir(String indent, String path)
+{
+    int dirCount = 0;
+    Dir dir = gfs.openDir(path);
+    while (dir.next())
+    {
+        ++dirCount;
+        if (dir.isDirectory())
+        {
+            Serial.printf_P(PSTR("%s%s [Dir]\n"), indent.c_str(), dir.fileName().c_str());
+            dirCount += listDir(indent + "  ", path + dir.fileName() + "/");
+        }
+        else
+            Serial.printf_P(PSTR("%s%-16s (%ld Bytes)\n"), indent.c_str(), dir.fileName().c_str(), (uint32_t)dir.fileSize());
+    }
+    return dirCount;
+}
+
+void help()
+{
+    Serial.printf("interactive: F/ormat D/ir\n");
+}
 
 // ------------------------
-void loop() {
-// ------------------------
-	if(dav.isClientWaiting())	{
-		if(initFailed)
-			return dav.rejectClient(statusMessage);
+void loop()
+{
+    int c = Serial.read();
+    if (c == 'F')
+    {
+        Serial.println("formatting...");
+        if (gfs.format())
+            Serial.println("Success");
+        else
+            Serial.println("Failure");
+    }
+    else if (c == 'D')
+    {
+        Serial.printf("-> %d dir/files\n", listDir("", "/"));
+    }
+    else if (c > 0)
+        help();
 
-		// call handle if server was initialized properly
-		dav.handleClient();
-	}
+    // ------------------------
+    if (dav.isClientWaiting())
+    {
+        if (initFailed)
+            return dav.rejectClient(statusMessage);
+
+        // call handle if server was initialized properly
+        dav.handleClient();
+    }
 }
 
 
