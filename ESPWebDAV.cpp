@@ -27,6 +27,19 @@ const char *wdays[]  = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 #define SCUNLOCK ""
 #endif
 
+void ESPWebDAV::stripSlashes(String& name, bool front)
+{
+    if (front)
+        while (name.length() && name[0] == '/')
+            name.remove(0, 1);
+    size_t i = 0;
+    while (i < name.length())
+        if (name[i] == '/' && ((i == name.length() - 1) || name[i + 1] == '/'))
+            name.remove(i, 1);
+        else
+            i++;
+}
+
 // ------------------------
 void ESPWebDAV::begin(WiFiServer* server, FS* gfs)
 // ------------------------
@@ -36,22 +49,25 @@ void ESPWebDAV::begin(WiFiServer* server, FS* gfs)
 }
 
 // ------------------------
-void ESPWebDAV::handleNotFound()
+void ESPWebDAV::handleIssue(int code, const char* text)
 {
     // ------------------------
-    String message = "Not found\n";
-    message += "URI: ";
+    String message = text;
+    message += "\nURI: ";
     message += uri;
     message += " Method: ";
     message += method;
     message += "\n";
+    
+    String err;
+    err += code;
+    err += ' ';
+    err += text;
 
-    sendHeader("Allow", "OPTIONS,MKCOL,POST,PUT");
-    send("404 Not Found", "text/plain", message);
-    DBG_PRINTLN("404 Not Found");
+    //sendHeader("Allow", "OPTIONS,MKCOL,POST,PUT");
+    send(err, "text/plain", message);
+    DBG_PRINTLN(err);
 }
-
-
 
 // ------------------------
 void ESPWebDAV::handleReject(const String& rejectMessage)
@@ -83,7 +99,7 @@ void ESPWebDAV::handleReject(const String& rejectMessage)
     }
     else
         // if reached here, means its a 404
-        handleNotFound();
+        handleIssue(404, "Not found");
 }
 
 
@@ -98,16 +114,22 @@ void ESPWebDAV::handleRequest(const String& blank)
 {
     DBG_PRINTF("############################################\n");
     (void)blank;
+
+    stripSlashes(uri);
+
     // ------------------------
     ResourceType resource = RESOURCE_NONE;
 
     // does uri refer to a file or directory or a null?
-    File tFile = gfs->open(uri, "r");
-    if (tFile)
+    File file = gfs->open(uri, "r");
+    if (file)
     {
-        resource = tFile.isDirectory() ? RESOURCE_DIR : RESOURCE_FILE;
-        tFile.close();
+        resource = file.isDirectory() ? RESOURCE_DIR : RESOURCE_FILE;
+        DBG_PRINTF("resource: '%s' is %s\n", uri.c_str(), resource == RESOURCE_DIR? "dir": "file");
     }
+    else
+        DBG_PRINTF("resource: '%s': no file nor dir\n", uri.c_str());
+
 
     DBG_PRINT("\r\nm: "); DBG_PRINT(method);
     DBG_PRINT(" r: "); DBG_PRINT(resource);
@@ -123,7 +145,7 @@ void ESPWebDAV::handleRequest(const String& blank)
 
     // handle properties
     if (method.equals("PROPFIND"))
-        return handleProp(resource);
+        return handleProp(resource, file);
 
     if (method.equals("GET"))
         return handleGet(resource, true);
@@ -149,7 +171,7 @@ void ESPWebDAV::handleRequest(const String& blank)
 #endif
 
     if (method.equals("PROPPATCH"))
-        return handlePropPatch(resource);
+        return handlePropPatch(resource, file);
 
     // directory creation
     if (method.equals("MKCOL"))
@@ -163,8 +185,12 @@ void ESPWebDAV::handleRequest(const String& blank)
     if (method.equals("DELETE"))
         return handleDelete(resource);
 
+    // delete a file or directory
+    if (method.equals("COPY"))
+        return handleCopy(resource, file);
+
     // if reached here, means its a 404
-    handleNotFound();
+    handleIssue(404, "Not found");
 }
 
 
@@ -181,6 +207,7 @@ void ESPWebDAV::handleOptions(ResourceType resource)
 
 
 #if LOCK_SUPPORT
+
 // ------------------------
 void ESPWebDAV::handleLock(ResourceType resource)
 {
@@ -190,7 +217,7 @@ void ESPWebDAV::handleLock(ResourceType resource)
     // does URI refer to an existing resource
     DBG_PRINTF("r=%d/%d\n", resource, RESOURCE_NONE);
     if (resource == RESOURCE_NONE)
-        return handleNotFound();
+        return handleIssue(404, "Not found");
 
     sendHeader("Allow", "PROPPATCH,PROPFIND,OPTIONS,DELETE" SCUNLOCK ",COPY" SCLOCK ",MOVE,HEAD,POST,PUT,GET");
     sendHeader("Lock-Token", "urn:uuid:26e57cb3-834d-191a-00de-000042bdecf9");
@@ -199,12 +226,12 @@ void ESPWebDAV::handleLock(ResourceType resource)
     inXML.reserve((size_t)contentLengthHeader.toInt());
     size_t numRead = readBytesWithTimeout((uint8_t*)&inXML[0], (size_t)contentLengthHeader.toInt());
     if (numRead == 0)
-        return handleNotFound();
+        return handleIssue(404, "Not found");
 
     int startIdx = inXML.indexOf("<D:href>");
     int endIdx = inXML.indexOf("</D:href>");
     if (startIdx < 0 || endIdx < 0)
-        return handleNotFound();
+        return handleIssue(404, "Not found");
 
     String resp;
     resp.reserve(300 + uri.length() + 100 + (endIdx - startIdx) + 100);
@@ -233,17 +260,17 @@ void ESPWebDAV::handleUnlock(ResourceType resource)
 #endif // LOCK_SUPPORT
 
 // ------------------------
-void ESPWebDAV::handlePropPatch(ResourceType resource)
+void ESPWebDAV::handlePropPatch(ResourceType resource, File& file)
 {
     // ------------------------
     DBG_PRINTLN("PROPPATCH forwarding to PROPFIND");
-    handleProp(resource);
+    handleProp(resource, file);
 }
 
 
 
 // ------------------------
-void ESPWebDAV::handleProp(ResourceType resource)
+void ESPWebDAV::handleProp(ResourceType resource, File& file)
 {
     // ------------------------
     DBG_PRINTLN("Processing PROPFIND");
@@ -258,7 +285,7 @@ void ESPWebDAV::handleProp(ResourceType resource)
 
     // does URI refer to an existing resource
     if (resource == RESOURCE_NONE)
-        return handleNotFound();
+        return handleIssue(404, "Not found");
 
     if (resource == RESOURCE_FILE)
         sendHeader("Allow", "PROPFIND,OPTIONS,DELETE,COPY,MOVE,HEAD,POST,PUT,GET");
@@ -270,17 +297,20 @@ void ESPWebDAV::handleProp(ResourceType resource)
     sendContent(F("<?xml version=\"1.0\" encoding=\"utf-8\"?>"));
     sendContent(F("<D:multistatus xmlns:D=\"DAV:\">"));
 
-    // open this resource
-    Dir entry = gfs->openDir(uri);
-    sendPropResponse(false, entry);
-
-    if ((resource == RESOURCE_DIR) && (depth == DEPTH_CHILD))
+    if (file.isFile() || depth == DEPTH_NONE)
     {
+        DBG_PRINTF("----- RESOURCE FILE '%s':\n", uri.c_str());
+        sendPropResponse(file.isDirectory(), file.name(), file.size(), file.getLastWrite());
+    }
+    else
+    {
+        DBG_PRINTF("----- OPENING resource '%s':\n", uri.c_str());
+        Dir entry = gfs->openDir(uri);
         // append children information to message
         while (entry.next())
         {
             yield();
-            sendPropResponse(true, entry);
+            sendPropResponse(entry.isDirectory(), entry.fileName().c_str(), entry.fileSize(), entry.fileTime());
         }
     }
 
@@ -290,22 +320,17 @@ void ESPWebDAV::handleProp(ResourceType resource)
 
 
 // ------------------------
-void ESPWebDAV::sendPropResponse(boolean recursing, Dir& entry)
+void ESPWebDAV::sendPropResponse(bool isDir, const char* name, size_t size, time_t lastWrite)
 {
     // ------------------------
     // String fullResPath = "http://" + hostHeader + uri;
     String fullResPath = uri;
-
-    if (recursing)
-    {
-        if (!fullResPath.endsWith("/"))
-            fullResPath += '/';
-        fullResPath += entry.fileName();
-    }
+    if (!fullResPath.endsWith("/"))
+        fullResPath += '/';
+    fullResPath += name;
 
     // get & convert time to required format
     // Tue, 13 Oct 2015 17:07:35 GMT
-    time_t lastWrite = entry.fileTime();
     tm* gTm = gmtime(&lastWrite);
     String fileTimeStamp;
     {
@@ -326,34 +351,26 @@ void ESPWebDAV::sendPropResponse(boolean recursing, Dir& entry)
     sendContent("\"" + sha1(fullResPath + fileTimeStamp) + "\"");
     sendContent(F("</D:getetag>"));
 
-    File x = gfs->open(fullResPath, "r");
-    bool isdir = x.isDirectory();
+    DBG_PRINTF("-----\nentry: '%s'(dir:%d) date: '%s'\n-----\n",
+        fullResPath.c_str(), isDir,
+        fileTimeStamp.c_str());
 
-    DBG_PRINTF("entry: '%s' dir: %d/%d date: '%s'\n", fullResPath.c_str(), entry.isDirectory(), isdir, fileTimeStamp.c_str());
-
-#if 1
-    if (isdir)
-#else
-    if (fullResPath == "/" || // <- FS bug?
-            entry.isDirectory())
-#endif
+    if (isDir)
     {
-        sendContent(F("<D:resourcetype xmlns:D=\"DAV:\"><D:collection/></D:resourcetype>"));
+        sendContent(F("<D:resourcetype><D:collection/></D:resourcetype>"));
     }
     else
     {
         sendContent(F("<D:resourcetype/><D:getcontentlength>"));
         // append the file size
         //sendContent(String(entry.fileSize()));
-        sendContent(String(x.size()));
+        sendContent(String(size));
         sendContent(F("</D:getcontentlength><D:getcontenttype>"));
         // append correct file mime type
         sendContent(getMimeType(fullResPath));
         sendContent(F("</D:getcontenttype>"));
     }
     sendContent(F("</D:prop></D:propstat></D:response>"));
-
-    x.close();
 }
 
 
@@ -367,7 +384,7 @@ void ESPWebDAV::handleGet(ResourceType resource, bool isGet)
 
     // does URI refer to an existing file resource
     if (resource != RESOURCE_FILE)
-        return handleNotFound();
+        return handleIssue(404, "Not found");
 
     long tStart = millis();
     File file = gfs->open(uri, "r");
@@ -414,7 +431,7 @@ void ESPWebDAV::handleGet(ResourceType resource, bool isGet)
         while (remaining > 0 && file.available())
         {
             // SD read speed ~ 17sec for 4.5MB file
-            size_t toRead = remaining > sizeof(buf) ? sizeof(buf) : remaining;
+            size_t toRead = (size_t)remaining > sizeof(buf) ? sizeof(buf) : remaining;
             size_t numRead = file.read((uint8_t*)buf, toRead);
             DBG_PRINTF("read %d bytes from file\n", (int)numRead);
             if (client.write(buf, numRead) != numRead)
@@ -425,7 +442,7 @@ void ESPWebDAV::handleGet(ResourceType resource, bool isGet)
                 break;
             }
 
-            for (int i = 0; i < 80 && i < numRead; i++)
+            for (size_t i = 0; i < 80 && i < numRead; i++)
                 DBG_PRINTF("%c", buf[i] < 32 || buf[i] > 127 ? '.' : buf[i]);
 
             remaining -= numRead;
@@ -447,7 +464,7 @@ void ESPWebDAV::handlePut(ResourceType resource)
 
     // does URI refer to a directory
     if (resource == RESOURCE_DIR)
-        return handleNotFound();
+        return handleIssue(404, "Not found");
 
     sendHeader("Allow", "PROPFIND,OPTIONS,DELETE,COPY,MOVE,HEAD,POST,PUT,GET");
 
@@ -527,16 +544,19 @@ void ESPWebDAV::handleWriteError(const String& message, File& file)
 void ESPWebDAV::handleDirectoryCreate(ResourceType resource)
 {
     // ------------------------
-    DBG_PRINTF("Processing MKCOL (r=%d uri='%s')\n", (int)resource, uri.c_str());
+    DBG_PRINTF("Processing MKCOL (r=%d uri='%s' cl=%s)\n", (int)resource, uri.c_str(), contentLengthHeader.c_str());
+
+    if (contentLengthHeader.length() && contentLengthHeader.toInt() > 0)
+        return handleIssue(415, "Unsupported Media Type");
 
     // does URI refer to anything
     if (resource != RESOURCE_NONE)
-        return handleNotFound();
+        return handleIssue(405, "Not allowed");
 
-    while (uri.length() && uri[uri.length() - 1] == '/')
-        uri.remove(uri.length() - 1);
+    stripSlashes(uri, true);
 
     // create directory
+    DBG_PRINTF("mkdir '%s'\n", uri.c_str());
     if (!gfs->mkdir(uri.c_str()))
     {
         // send error
@@ -560,10 +580,10 @@ void ESPWebDAV::handleMove(ResourceType resource)
 
     // does URI refer to anything
     if (resource == RESOURCE_NONE)
-        return handleNotFound();
+        return handleIssue(404, "Not found");
 
     if (destinationHeader.length() == 0)
-        return handleNotFound();
+        return handleIssue(404, "Not found");
 
     String dest = urlToUri(destinationHeader);
 
@@ -594,7 +614,7 @@ void ESPWebDAV::handleDelete(ResourceType resource)
 
     // does URI refer to anything
     if (resource == RESOURCE_NONE)
-        return handleNotFound();
+        return handleIssue(404, "Not found");
 
     bool retVal;
 
@@ -616,5 +636,83 @@ void ESPWebDAV::handleDelete(ResourceType resource)
     DBG_PRINTLN("Delete successful");
     sendHeader("Allow", "OPTIONS,MKCOL" SCLOCK ",POST,PUT");
     send("200 OK", NULL, "");
+}
+
+
+// ------------------------
+void ESPWebDAV::handleCopy(ResourceType resource, File& file)
+{
+    const char* successCode = "201 Created";
+
+    // ------------------------
+    DBG_PRINTLN("Processing COPY");
+
+    if (resource == RESOURCE_NONE)
+        return handleIssue(404, "Not found");
+
+    if (file.isDirectory())
+        return handleIssue(402, "Payment Required");
+
+    if (!file || resource != RESOURCE_FILE)
+        return handleIssue(413, "Request Entity Too Large");
+
+    String realDest = destinationHeader;
+    {
+        int j = -1;
+        for (int i = 0; i < 3; i++)
+            j = realDest.indexOf('/', j + 1);
+        realDest.remove(0,j);
+    }
+
+    if (realDest.length() && realDest[realDest.length() - 1] == '/')
+    {
+        realDest += file.name();
+        successCode = "204 No Content"; // weird
+    }
+    DBG_PRINTF("dest = '%s' => '%s'\n", destinationHeader.c_str(), realDest.c_str());
+    
+    // check existent path
+    String dpath = realDest.substring(0, realDest.lastIndexOf('/'));
+    File dir = gfs->open(dpath, "r");
+    if (!dir || !dir.isDirectory())
+    {
+        DBG_PRINTF("dest dir '%s' not existing\n", dpath.c_str());
+        return handleIssue(409, "Conflict");
+    }
+
+    // copy file
+    
+    File dest;
+    if (overwrite.equalsIgnoreCase("F"))
+    {
+        dest = gfs->open(realDest, "r");
+        if (dest)
+            return handleIssue(412, "Precondition Failed");
+    }
+    dest = gfs->open(realDest, "w");
+    if (!dest)
+        return handleIssue(413, "Request Entity Too Large");
+    while (file.available())
+    {
+        yield();
+        char cp[128];
+        auto nb = file.read((uint8_t*)cp, sizeof(cp));
+        if (!nb)
+        {
+            DBG_PRINTF("copy: short read\n");
+            return handleIssue(500, "Internal Server Error");
+        }
+        auto wr = dest.write(cp, nb);
+        if (wr != nb)
+        {
+            DBG_PRINTF("copy: short write wr=%d != rd=%d\n", (int)wr, (int)nb);
+            return handleIssue(500, "Internal Server Error");
+        }
+    }
+    dest.close();
+
+    DBG_PRINTLN("COPY successful");
+    sendHeader("Allow", "OPTIONS,MKCOL" SCLOCK ",POST,PUT");
+    send(successCode, NULL, "");
 }
 

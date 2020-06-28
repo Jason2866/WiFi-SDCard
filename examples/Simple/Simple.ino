@@ -62,7 +62,7 @@ void setup()
 }
 
 
-int listDir(String indent, String path)
+int listDir(const String& indent, const String& path)
 {
     int dirCount = 0;
     Dir dir = gfs.openDir(path);

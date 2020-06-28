@@ -137,6 +137,7 @@ void ESPWebDAV::processClient(THandlerFunction handler, const String& message)
     depthHeader.clear();
     hostHeader.clear();
     destinationHeader.clear();
+    overwrite.clear();
 
     // extract uri, headers etc
     if (parseRequest())
@@ -227,6 +228,8 @@ bool ESPWebDAV::parseRequest()
             destinationHeader = headerValue;
         else if (headerName.equalsIgnoreCase("Range"))
             processRange(headerValue);
+        else if (headerName.equalsIgnoreCase("Overwrite"))
+            overwrite = headerValue;
     }
     DBG_PRINTF("-------------------- <<<< RECV\n");
 

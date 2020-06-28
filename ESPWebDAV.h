@@ -27,25 +27,29 @@ public:
     void handleClient(const String& blank = "");
     void rejectClient(const String& rejectMessage);
 
+    static void stripSlashes (String& name, bool front = false);
+
 protected:
     typedef void (ESPWebDAV::*THandlerFunction)(const String&);
 
     void processClient(THandlerFunction handler, const String& message);
-    void handleNotFound();
+    void handleIssue (int code, const char* text);
     void handleReject(const String& rejectMessage);
     void handleRequest(const String& blank);
     void handleOptions(ResourceType resource);
     void handleLock(ResourceType resource);
     void handleUnlock(ResourceType resource);
-    void handlePropPatch(ResourceType resource);
-    void handleProp(ResourceType resource);
-    void sendPropResponse(boolean recursing, Dir& curFile);
+    void handlePropPatch(ResourceType resource, File& file);
+    void handleProp(ResourceType resource, File& file);
     void handleGet(ResourceType resource, bool isGet);
     void handlePut(ResourceType resource);
     void handleWriteError(const String& message, File& wFile);
     void handleDirectoryCreate(ResourceType resource);
     void handleMove(ResourceType resource);
     void handleDelete(ResourceType resource);
+    void handleCopy(ResourceType resource, File& file);
+
+    void sendPropResponse(bool isDir, const char* name, size_t size, time_t lastWrite);
 
     // Sections are copied from ESP8266Webserver
     String getMimeType(const String& path);
@@ -73,6 +77,7 @@ protected:
     String 		depthHeader;
     String 		hostHeader;
     String		destinationHeader;
+    String      overwrite;
 
     String 		_responseHeaders;
     bool		_chunked;
