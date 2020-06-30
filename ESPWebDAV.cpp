@@ -34,7 +34,7 @@ void ESPWebDAV::stripSlashes(String& name, bool front)
             name.remove(0, 1);
     size_t i = 0;
     while (i < name.length())
-        if (name[i] == '/' && ((i == name.length() - 1) || name[i + 1] == '/'))
+        if (name[i] == '/' && name.length() > 1 && ((i == name.length() - 1) || name[i + 1] == '/'))
             name.remove(i, 1);
         else
             i++;
@@ -617,26 +617,16 @@ void ESPWebDAV::handleDirectoryCreate(ResourceType resource)
     if (resource != RESOURCE_NONE)
         return handleIssue(405, "Not allowed");
 
-    stripSlashes(uri, false);
-    
-    bool created = false;
+    stripSlashes(uri);
+    int parentLastIndex = uri.lastIndexOf('/');
+    if (parentLastIndex > 0)
     {
-        String part;
-        part.reserve(uri.length());
-        for (int i = 0; true;)
-        {
-            i = uri.indexOf('/', i + 1);
-            part = uri;
-            if (i > 0)
-                part.remove(i);
-            created = gfs->mkdir(part.c_str());
-            DBG_PRINTF("mkdir '%s': %d\n", part.c_str(), created);
-            if (i < 0)
-                break;
-        }
+        File testParent = gfs->open(uri.substring(0, parentLastIndex), "r");
+        if (!testParent.isDirectory())
+            return handleIssue(409, "Conflict");
     }
 
-    if (!created)
+    if (!gfs->mkdir(uri))
     {
         // send error
         send("500 Internal Server Error", "text/plain", "Unable to create directory");
@@ -751,13 +741,21 @@ void ESPWebDAV::handleDelete(ResourceType resource)
     if (resource == RESOURCE_NONE)
         return handleIssue(404, "Not found");
 
-    bool retVal;
+    stripSlashes(uri);
 
+    bool retVal;
     if (resource == RESOURCE_FILE)
         // delete a file
         retVal = gfs->remove(uri);
     else
         retVal = deleteDir(uri);
+
+    // for some reason, parent dir can be removed if empty
+    // need to leave it there (also to pass compliance tests).
+    int parentIdx = uri.lastIndexOf('/');
+    uri.remove(parentIdx);
+    DBG_PRINTF("parent='%s'\n", uri.c_str());
+    gfs->mkdir(uri);
 
     if (!retVal)
     {
