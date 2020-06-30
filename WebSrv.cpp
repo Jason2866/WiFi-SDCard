@@ -130,7 +130,7 @@ void ESPWebDAV::processClient(THandlerFunction handler, const String& message)
     // reset all variables
     _chunked = false;
     _responseHeaders = String();
-    _contentLength = CONTENT_LENGTH_NOT_SET;
+    _contentLength = (size_t)CONTENT_LENGTH_NOT_SET;
     method.clear();
     uri.clear();
     contentLengthHeader.clear();
@@ -191,6 +191,7 @@ bool ESPWebDAV::parseRequest()
         return false;
     }
 
+    DBG_PRINTF("############################################\n");
     DBG_PRINTF("RECV >>>> --------------------\n");
     method = req.substring(0, addr_start);
     uri = urlDecode(req.substring(addr_start + 1, addr_end));
@@ -269,7 +270,7 @@ void ESPWebDAV::send(const String& code, const char* content_type, const String&
     {
         sendContent(content);
         DBG_PRINTF("---- content (%d bytes):\n", (int)content.length());
-        for (int i = 0; i < DEBUG_LEN && i < content.length(); i++)
+        for (size_t i = 0; i < DEBUG_LEN && i < content.length(); i++)
             DBG_PRINTF("%c", content[i] < 32 || content[i] > 127 ? '.' : content[i]);
         if (content.length() > DEBUG_LEN) DBG_PRINTF("...");
         DBG_PRINTF("\n");
@@ -316,12 +317,12 @@ void ESPWebDAV::sendContent(const String& content)
     if (_chunked)
     {
         char chunkSize[32];
-        snprintf(chunkSize, sizeof(chunkSize), "%x%s", size, footer);
+        snprintf(chunkSize, sizeof(chunkSize), "%x%s", (int)size, footer);
         client.write(chunkSize, strlen(chunkSize));
     }
 
     DBG_PRINTF("---- %scontent (%d bytes):\n", _chunked ? "chunked " : "", (int)content.length());
-    for (int i = 0; i < DEBUG_LEN && i < content.length(); i++)
+    for (size_t i = 0; i < DEBUG_LEN && i < content.length(); i++)
         DBG_PRINTF("%c", content[i] < 32 || content[i] > 127 ? '.' : content[i]);
     if (content.length() > DEBUG_LEN) DBG_PRINTF("...");
     DBG_PRINTF("\n");
@@ -350,7 +351,7 @@ void ESPWebDAV::sendContent_P(PGM_P content)
     if (_chunked)
     {
         char chunkSize[32];
-        snprintf(chunkSize, sizeof(chunkSize), "%x%s", size, footer);
+        snprintf(chunkSize, sizeof(chunkSize), "%x%s", (int)size, footer);
         client.write(chunkSize, strlen(chunkSize));
     }
 

@@ -40,6 +40,68 @@ void ESPWebDAV::stripSlashes(String& name, bool front)
             i++;
 }
 
+void ESPWebDAV::dir (const String& path, Print* out)
+{
+    out->printf(">>>>>>>> '%s'\n", path.c_str());
+    dirAction(path, true, [out](int depth, const String& parent, Dir& entry)->bool
+        {
+            (void)depth;
+            //for (int i = 0; i < depth; i++)
+            //    out->print("   ");
+            out->printf("%c%s/%s%c\n",
+                entry.isDirectory()?'[':' ',
+                parent.c_str(),
+                entry.fileName().c_str(),
+                entry.isDirectory()?']':' ');
+            return true;
+        });
+    out->printf("<<<<<<<<\n");
+}
+
+bool ESPWebDAV::dirAction (const String& path, bool recursive, const std::function<bool(int depth, const String& parent, Dir& entry)>& cb, int depth)
+{
+    //DBG_PRINTF("diraction: scanning dir '%s'\n", path.c_str());
+    Dir entry = gfs->openDir(path);
+    
+    while (entry.next())
+        if (!entry.isDirectory())
+        {
+            //DBG_PRINTF("diraction: %s/%s (%d B): ", path.c_str(), entry.fileName().c_str(), (int)entry.fileSize());
+            if (cb(depth, path, entry))
+            {
+                //DBG_PRINTF("(file-OK)\n");
+            }
+            else
+            {
+                //DBG_PRINTF("(file-abort)\n");
+                return false;
+            }
+        }
+
+    if (recursive)
+    {
+        entry = gfs->openDir(path);
+        while (entry.next())
+            if (entry.isDirectory())
+            {
+                //DBG_PRINTF("diraction: -------- %s/%s/\n", path.c_str(), entry.fileName().c_str());
+                if (   dirAction(path + '/' + entry.fileName(), recursive, cb, depth + 1)
+                    && cb(depth, path, entry))
+                {
+                    //DBG_PRINTF("(dir-OK)\n");
+                }
+                else
+                {
+                    //DBG_PRINTF("(dir-abort)\n");
+                    return false;
+                }
+                
+            }
+    }
+
+    return true;
+}
+
 // ------------------------
 void ESPWebDAV::begin(WiFiServer* server, FS* gfs)
 // ------------------------
@@ -112,13 +174,23 @@ void ESPWebDAV::handleReject(const String& rejectMessage)
 // ------------------------
 void ESPWebDAV::handleRequest(const String& blank)
 {
-    DBG_PRINTF("############################################\n");
     (void)blank;
 
     stripSlashes(uri);
 
     // ------------------------
     ResourceType resource = RESOURCE_NONE;
+
+    // check depth header
+    depth = DEPTH_NONE;
+    if (depthHeader.length())
+    {
+        if (depthHeader.equals("1"))
+            depth = DEPTH_CHILD;
+        else if (depthHeader.equals("infinity"))
+            depth = DEPTH_ALL;
+        DBG_PRINT("Depth: "); DBG_PRINTLN(depth);
+    }
 
     // does uri refer to a file or directory or a null?
     File file = gfs->open(uri, "r");
@@ -179,7 +251,7 @@ void ESPWebDAV::handleRequest(const String& blank)
 
     // move a file or directory
     if (method.equals("MOVE"))
-        return handleMove(resource);
+        return handleMove(resource, file);
 
     // delete a file or directory
     if (method.equals("DELETE"))
@@ -274,14 +346,6 @@ void ESPWebDAV::handleProp(ResourceType resource, File& file)
 {
     // ------------------------
     DBG_PRINTLN("Processing PROPFIND");
-    // check depth header
-    DepthType depth = DEPTH_NONE;
-    if (depthHeader.equals("1"))
-        depth = DEPTH_CHILD;
-    else if (depthHeader.equals("infinity"))
-        depth = DEPTH_ALL;
-
-    DBG_PRINT("Depth: "); DBG_PRINTLN(depth);
 
     // does URI refer to an existing resource
     if (resource == RESOURCE_NONE)
@@ -553,11 +617,26 @@ void ESPWebDAV::handleDirectoryCreate(ResourceType resource)
     if (resource != RESOURCE_NONE)
         return handleIssue(405, "Not allowed");
 
-    stripSlashes(uri, true);
+    stripSlashes(uri, false);
+    
+    bool created = false;
+    {
+        String part;
+        part.reserve(uri.length());
+        for (int i = 0; true;)
+        {
+            i = uri.indexOf('/', i + 1);
+            part = uri;
+            if (i > 0)
+                part.remove(i);
+            created = gfs->mkdir(part.c_str());
+            DBG_PRINTF("mkdir '%s': %d\n", part.c_str(), created);
+            if (i < 0)
+                break;
+        }
+    }
 
-    // create directory
-    DBG_PRINTF("mkdir '%s'\n", uri.c_str());
-    if (!gfs->mkdir(uri.c_str()))
+    if (!created)
     {
         // send error
         send("500 Internal Server Error", "text/plain", "Unable to create directory");
@@ -573,23 +652,56 @@ void ESPWebDAV::handleDirectoryCreate(ResourceType resource)
 
 
 // ------------------------
-void ESPWebDAV::handleMove(ResourceType resource)
+void ESPWebDAV::handleMove(ResourceType resource, File& src)
 {
+    const char* successCode = "201 Created";
+
     // ------------------------
     DBG_PRINTLN("Processing MOVE");
+    dir("/", &Serial);
 
     // does URI refer to anything
-    if (resource == RESOURCE_NONE)
+    if (   resource == RESOURCE_NONE
+        || destinationHeader.length() == 0)
+    {
         return handleIssue(404, "Not found");
-
-    if (destinationHeader.length() == 0)
-        return handleIssue(404, "Not found");
+    }
 
     String dest = urlToUri(destinationHeader);
-
+    stripSlashes(dest);
+    File destFile = gfs->open(dest, "r");
     DBG_PRINT("Move destination: "); DBG_PRINTLN(dest);
 
-    // move file or directory
+    if (destFile && !destFile.isFile())
+    {
+        dest += '/';
+        dest += src.name();
+        stripSlashes(dest);
+        destFile.close();
+        destFile = gfs->open(dest, "r");
+        successCode = "204 No Content"; // MOVE to existing collection resource didn't give 204
+    }
+
+    if (destFile)
+    {
+        if (overwrite.equalsIgnoreCase("F"))
+            return handleIssue(412, "Precondition Failed");
+        if (destFile.isDirectory())
+        {
+            destFile.close();
+            deleteDir(dest);
+        }
+        else
+        {
+            destFile.close();
+            gfs->remove(dest);
+        }
+    }
+
+    src.close();
+    
+    DBG_PRINTF("finally rename '%s' -> '%s'\n", uri.c_str(), dest.c_str());
+
     if (!gfs->rename(uri, dest))
     {
         // send error
@@ -598,20 +710,43 @@ void ESPWebDAV::handleMove(ResourceType resource)
         return;
     }
 
+    dir("/", &Serial);
+
     DBG_PRINTLN("Move successful");
     sendHeader("Allow", "OPTIONS,MKCOL" SCLOCK ",POST,PUT");
-    send("201 Created", NULL, "");
+    send(successCode, NULL, "");
 }
 
 
+// ------------------------
+bool ESPWebDAV::deleteDir (const String& dir)
+{
+    dirAction(dir, true, [this](int depth, const String& parent, Dir& entry)->bool
+        {
+            (void)depth;
+            String toRemove;
+            toRemove.reserve(parent.length() + entry.fileName().length() + 2);
+            toRemove += parent;
+            toRemove += '/';
+            toRemove += entry.fileName();
+            bool ok = !!(entry.isDirectory()? gfs->rmdir(toRemove): gfs->remove(toRemove));
+            Serial.printf("DELETE %s %s: %s\n", entry.isDirectory()?"[ dir]":"[file]",toRemove.c_str(), ok? "ok":"bad");
+            return ok;
+        });
 
+    gfs->rmdir(uri);
+    // observation: with littleFS, when the last file of a directory is
+    // removed, the parent directory is removed.
+    // XXX or ensure it is not there anymore
+    return true;
+}
 
 // ------------------------
 void ESPWebDAV::handleDelete(ResourceType resource)
 {
     // ------------------------
-    DBG_PRINTLN("Processing DELETE");
-
+    DBG_PRINTF("Processing DELETE '%s'\n", uri.c_str());
+    
     // does URI refer to anything
     if (resource == RESOURCE_NONE)
         return handleIssue(404, "Not found");
@@ -622,8 +757,7 @@ void ESPWebDAV::handleDelete(ResourceType resource)
         // delete a file
         retVal = gfs->remove(uri);
     else
-        // delete a directory
-        retVal = gfs->rmdir(uri);
+        retVal = deleteDir(uri);
 
     if (!retVal)
     {
@@ -639,8 +773,51 @@ void ESPWebDAV::handleDelete(ResourceType resource)
 }
 
 
+bool ESPWebDAV::copyFile (File srcFile, const String& destName)
+{
+    File dest;
+    if (overwrite.equalsIgnoreCase("F"))
+    {
+        dest = gfs->open(destName, "r");
+        if (dest)
+        {
+            DBG_PRINTF("copy dest '%s' already exists and overwrite is false\n", destName.c_str());
+            handleIssue(412, "Precondition Failed");
+            return false;
+        }
+    }
+    dest = gfs->open(destName, "w");
+    if (!dest)
+    {
+        handleIssue(413, "Request Entity Too Large");
+        return false;
+    }    
+    while (srcFile.available())
+    {
+        ///XXX USE STREAMTO
+        yield();
+        char cp[128];
+        auto nb = srcFile.read((uint8_t*)cp, sizeof(cp));
+        if (!nb)
+        {
+            DBG_PRINTF("copy: short read\n");
+            handleIssue(500, "Internal Server Error");
+            return false;
+        }
+        auto wr = dest.write(cp, nb);
+        if (wr != nb)
+        {
+            DBG_PRINTF("copy: short write wr=%d != rd=%d\n", (int)wr, (int)nb);
+            handleIssue(500, "Internal Server Error");
+            return false;
+        }
+    }
+    dest.close();
+    return true;
+}
+
 // ------------------------
-void ESPWebDAV::handleCopy(ResourceType resource, File& file)
+void ESPWebDAV::handleCopy(ResourceType resource, File& src)
 {
     const char* successCode = "201 Created";
 
@@ -650,10 +827,7 @@ void ESPWebDAV::handleCopy(ResourceType resource, File& file)
     if (resource == RESOURCE_NONE)
         return handleIssue(404, "Not found");
 
-    if (file.isDirectory())
-        return handleIssue(402, "Payment Required");
-
-    if (!file || resource != RESOURCE_FILE)
+    if (!src) // || resource != RESOURCE_FILE)
         return handleIssue(413, "Request Entity Too Large");
 
     String realDest = destinationHeader;
@@ -666,52 +840,54 @@ void ESPWebDAV::handleCopy(ResourceType resource, File& file)
 
     if (realDest.length() && realDest[realDest.length() - 1] == '/')
     {
-        realDest += file.name();
-        successCode = "204 No Content"; // weird
+        // add file name
+        realDest += src.name();
+        successCode = "204 No Content"; // COPY to existing resource should give 204 (RFC2518:S8.8.5)
     }
-    DBG_PRINTF("dest = '%s' => '%s'\n", destinationHeader.c_str(), realDest.c_str());
+    DBG_PRINTF("copy: dest = '%s' <= '%s'\n", destinationHeader.c_str(), realDest.c_str());
     
-    // check existent path
-    String dpath = realDest.substring(0, realDest.lastIndexOf('/'));
-    File dir = gfs->open(dpath, "r");
-    if (!dir || !dir.isDirectory())
-    {
-        DBG_PRINTF("dest dir '%s' not existing\n", dpath.c_str());
-        return handleIssue(409, "Conflict");
-    }
+    String destPath = realDest.substring(0, realDest.lastIndexOf('/'));
+    File dest = gfs->open(destPath, "r");
 
-    // copy file
-    
-    File dest;
-    if (overwrite.equalsIgnoreCase("F"))
+    // copy directory
+    if (src.isDirectory())
     {
-        dest = gfs->open(realDest, "r");
-        if (dest)
-            return handleIssue(412, "Precondition Failed");
-    }
-    dest = gfs->open(realDest, "w");
-    if (!dest)
-        return handleIssue(413, "Request Entity Too Large");
-    while (file.available())
-    {
-        yield();
-        char cp[128];
-        auto nb = file.read((uint8_t*)cp, sizeof(cp));
-        if (!nb)
+        DBG_PRINTF("Source is directory\n");
+        if (dest.isFile())
         {
-            DBG_PRINTF("copy: short read\n");
-            return handleIssue(500, "Internal Server Error");
+            DBG_PRINTF("'%s' is not a directory\n", destPath.c_str());
+            return handleIssue(409, "Conflict");
         }
-        auto wr = dest.write(cp, nb);
-        if (wr != nb)
+        
+        if (!dirAction(src.fullName(), depth == DEPTH_ALL, [this, destPath](int depth, const String& parent, Dir& source)->bool
+            {
+                (void)depth;
+                (void)parent;
+                DBG_PRINTF("COPY: '%s' -> '%s'\n", source.fileName().c_str(), (destPath + '/' + source.fileName()).c_str());
+                return copyFile(gfs->open(source.fileName(), "r"), destPath + '/' + source.fileName());
+            }))
         {
-            DBG_PRINTF("copy: short write wr=%d != rd=%d\n", (int)wr, (int)nb);
-            return handleIssue(500, "Internal Server Error");
+            return handleIssue(402, "Payment Required");
         }
     }
-    dest.close();
+    else
+    {
+        DBG_PRINTF("Source is file\n");
 
-    DBG_PRINTLN("COPY successful");
+        // (COPY into non-existant collection '/litmus/nonesuch' succeeded)
+        if (!dest || !dest.isDirectory())
+        {
+            DBG_PRINTF("dest dir '%s' not existing\n", destPath.c_str());
+            return handleIssue(409, "Conflict");
+        }
+
+        // copy file
+        
+        if (!copyFile(src, realDest))
+            return;
+    }
+
+    DBG_PRINTLN("COPY successful\n");
     sendHeader("Allow", "OPTIONS,MKCOL" SCLOCK ",POST,PUT");
     send(successCode, NULL, "");
 }

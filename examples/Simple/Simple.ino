@@ -75,7 +75,7 @@ int listDir(const String& indent, const String& path)
             dirCount += listDir(indent + "  ", path + dir.fileName() + "/");
         }
         else
-            Serial.printf_P(PSTR("%s%-16s (%ld Bytes)\n"), indent.c_str(), dir.fileName().c_str(), (uint32_t)dir.fileSize());
+            Serial.printf_P(PSTR("%s%-16s (%u Bytes)\n"), indent.c_str(), dir.fileName().c_str(), (uint32_t)dir.fileSize());
     }
     return dirCount;
 }

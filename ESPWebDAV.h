@@ -1,3 +1,6 @@
+
+#include <functional>
+
 #include <ESP8266WiFi.h>
 
 // debugging
@@ -32,6 +35,16 @@ public:
 protected:
     typedef void (ESPWebDAV::*THandlerFunction)(const String&);
 
+    bool dirAction (
+        const String& path,
+        bool recursive,
+        const std::function<bool(int depth, const String& parent, Dir& entry)>& cb,
+        int depth = 0);
+
+    void dir (const String& path, Print* out);
+    bool copyFile (File file, const String& destName);
+    bool deleteDir (const String& dir);
+
     void processClient(THandlerFunction handler, const String& message);
     void handleIssue (int code, const char* text);
     void handleReject(const String& rejectMessage);
@@ -45,7 +58,7 @@ protected:
     void handlePut(ResourceType resource);
     void handleWriteError(const String& message, File& wFile);
     void handleDirectoryCreate(ResourceType resource);
-    void handleMove(ResourceType resource);
+    void handleMove(ResourceType resource, File& file);
     void handleDelete(ResourceType resource);
     void handleCopy(ResourceType resource, File& file);
 
@@ -78,6 +91,8 @@ protected:
     String 		hostHeader;
     String		destinationHeader;
     String      overwrite;
+    DepthType   depth;
+    
 
     String 		_responseHeaders;
     bool		_chunked;
