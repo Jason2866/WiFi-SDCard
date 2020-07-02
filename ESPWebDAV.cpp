@@ -74,7 +74,7 @@ bool ESPWebDAV::allowed (const String& uri, uint32_t ownash)
 #if WEBDAV_LOCK_SUPPORT > 1
 
     String test = uri;
-    while (true)
+    while (test.length())
     {
         stripSlashes(test);
         DBG_PRINTF("lock: testing '%s'\n", test.c_str());
@@ -388,51 +388,18 @@ void ESPWebDAV::handleLock(ResourceType resource)
 
     // does URI refer to an existing resource
     DBG_PRINTF("r=%d/%d\n", resource, RESOURCE_NONE);
-    if (resource == RESOURCE_NONE)
-        return handleIssue(404, "Not found");
+    //if (resource == RESOURCE_NONE)
+    //    return handleIssue(404, "Not found");
 
     sendHeader("Allow", "PROPPATCH,PROPFIND,OPTIONS,DELETE" SCUNLOCK ",COPY" SCLOCK ",MOVE,HEAD,POST,PUT,GET");
     //sendHeader("Lock-Token", "urn:uuid:26e57cb3-834d-191a-00de-000042bdecf9");
 
-#if 1
-    // move this to a function / Stream::to
-
-    String inXML;
-    size_t size = (size_t)contentLengthHeader.toInt();
-    inXML.reserve(size);
-    while (inXML.length() < size)
-    {
-        int c = client.read();
-        if (c > 0)
-            inXML += (char)c;
-        else
-            break;
-    }
-#else
-    //XXXFIXME debugme segfaults on host emulation
-
     StreamString inXML;
-
-    inXML.reserve((size_t)contentLengthHeader.toInt());
-    size_t numRead = readBytesWithTimeout((uint8_t*)&inXML[0], (size_t)contentLengthHeader.toInt());
-    if (numRead == 0)
-        return handleIssue(404, "Not found");
-#endif
+    getPayload(inXML);
 
     DBG_PRINTLN(">>>>> payload");
     DBG_PRINTLN(inXML);
     DBG_PRINTLN("<<<<< payload");
-
-#if 0 // 0: don't care
-    bool askLockWrite = inXML.indexOf("<write") > 0;
-    bool askLockExclusive = inXML.indexOf("<exclusive") > 0;
-
-    String href;
-    startIdx = inXML.indexOf("<D:href>");
-    endIdx = inXML.indexOf("</D:href>");
-    if (startIdx > 0 && endIdx > 0)
-            href = inXML.substring(startIdx + 8, endIdx);
-#endif
 
 #if WEBDAV_LOCK_SUPPORT > 1
     // lock owner
@@ -693,8 +660,8 @@ void ESPWebDAV::handleGet(ResourceType resource, bool isGet)
     if (resource != RESOURCE_FILE)
         return handleIssue(404, "Not found");
 
-    if (!allowed(uri))
-        return handleIssue(423, "Locked");
+    //if (!allowed(uri))
+    //    return handleIssue(423, "Locked");
 
     long tStart = millis();
     File file = gfs->open(uri, "r");
