@@ -3,7 +3,6 @@
 #include <FS.h>
 #include <Hash.h>
 #include <time.h>
-#include <StreamString.h>
 #include <coredecls.h> // crc32()
 
 #include <ESPWebDAV.h>
@@ -115,7 +114,7 @@ bool ESPWebDAV::allowed (const String& uri, const String& xml)
 
 void ESPWebDAV::dir (const String& path, Print* out)
 {
-    out->printf(">>>>>>>> '%s'\n", path.c_str());
+    out->printf(">>>>>>>> dir '%s'\n", path.c_str());
     dirAction(path, true, [out](int depth, const String& parent, Dir& entry)->bool
         {
             (void)depth;
@@ -128,7 +127,27 @@ void ESPWebDAV::dir (const String& path, Print* out)
                 entry.isDirectory()?']':' ');
             return true;
         });
-    out->printf("<<<<<<<<\n");
+    out->printf("<<<<<<<< dir\n");
+}
+
+void ESPWebDAV::getPayload (StreamString& payload)
+{
+    int hcl = contentLengthHeader.toInt();
+    DBG_PRINTF("content length=%s\n", contentLengthHeader.c_str());
+    if (hcl > 0)
+    {
+        payload.reserve(hcl);
+        while (payload.length() < (size_t)_contentLength && client.available())
+        {
+            uint8_t buf[16];
+            auto n = client.read(buf, std::min((size_t)client.available(), sizeof(buf)));
+            if (n > 0)
+                payload.write(buf, n);
+        }
+        DBG_PRINTF("CONTENT:\n");
+        DBG_PRINT(payload);
+        DBG_PRINTF("\n");
+    }
 }
 
 bool ESPWebDAV::dirAction (const String& path, bool recursive, const std::function<bool(int depth, const String& parent, Dir& entry)>& cb, int depth)
@@ -400,7 +419,7 @@ void ESPWebDAV::handleLock(ResourceType resource)
         return handleIssue(404, "Not found");
 #endif
 
-    DBG_PRINTLN("payload >>>>>");
+    DBG_PRINTLN(">>>>> payload");
     DBG_PRINTLN(inXML);
     DBG_PRINTLN("<<<<< payload");
 
@@ -428,7 +447,7 @@ void ESPWebDAV::handleLock(ResourceType resource)
         ownash = startIdx > 0 && endIdx > 0? crc32(&inXML[startIdx + 7], endIdx - startIdx - 7): 0;
     }
 
-    DBG_PRINTF("lock owner: 0x%08x\n", ownash);
+    DBG_PRINTF("asker: 0x%08x\n", ownash);
     stripSlashes(uri);
     uint32_t pash = crc32(uri.c_str(), uri.length());
     const auto& lock = _locks.find(pash);
@@ -440,7 +459,7 @@ void ESPWebDAV::handleLock(ResourceType resource)
     {
         if (lock->second != ownash)
         {
-            DBG_PRINTF("cannot relock '%s'\n", uri.c_str());
+            DBG_PRINTF("cannot relock '%s' (owner is 0x%08x)\n", uri.c_str(), lock->second);
             return handleIssue(423, "Locked");
         }
         DBG_PRINTF("owner has relocked\n");
@@ -560,22 +579,7 @@ void ESPWebDAV::handleProp(ResourceType resource, File& file)
     DBG_PRINTLN("Processing PROPFIND");
 
     StreamString payload;
-    int hcl = contentLengthHeader.toInt();
-    DBG_PRINTF("content length=%s\n", contentLengthHeader.c_str());
-    if (hcl > 0)
-    {
-        payload.reserve(hcl);
-        while (payload.length() < (size_t)_contentLength && client.available())
-        {
-            uint8_t buf[16];
-            auto n = client.read(buf, std::min((size_t)client.available(), sizeof(buf)));
-            if (n > 0)
-                payload.write(buf, n);
-        }
-        DBG_PRINTF("CONTENT:\n");
-        DBG_PRINT(payload);
-        DBG_PRINTF("\n");
-    }
+    getPayload(payload);
 
     // does URI refer to an existing resource
     if (resource == RESOURCE_NONE)
@@ -1078,20 +1082,32 @@ void ESPWebDAV::handleCopy(ResourceType resource, File& src)
     if (!src) // || resource != RESOURCE_FILE)
         return handleIssue(413, "Request Entity Too Large");
 
-    String destParentPath = destinationHeader;
+    StreamString payload;
+    getPayload(payload);
 
-    String destPath = destParentPath;
+    String destParentPath = destinationHeader;
     {
         int j = -1;
         for (int i = 0; i < 3; i++)
-            j = destPath.indexOf('/', j + 1);
-        destPath.remove(0,j);
+            j = destParentPath.indexOf('/', j + 1);
+        destParentPath.remove(0,j);
     }
-    if (destPath.length() && destPath[destPath.length() - 1] == '/')
+
+    String destPath = destParentPath;
+    if (destPath.length())
     {
-        // add file name
-        destPath += src.name();
-        successCode = "204 No Content"; // COPY to existing resource should give 204 (RFC2518:S8.8.5)
+        if (destPath[destPath.length() - 1] == '/')
+        {
+            // add file name
+            destPath += src.name();
+            successCode = "204 No Content"; // COPY to existing resource should give 204 (RFC2518:S8.8.5)
+        }
+        else
+        {
+            int lastSlash = destParentPath.lastIndexOf('/');
+            if (lastSlash > 0)
+                destParentPath.remove(lastSlash);
+        }
     }
 
     DBG_PRINTF("copy: src='%s'=>'%s' dest='%s'=>'%s' parent:'%s'\n",
@@ -1100,7 +1116,7 @@ void ESPWebDAV::handleCopy(ResourceType resource, File& src)
         destParentPath.c_str());
     File destParent = gfs->open(destParentPath, "r");
 
-    if (!allowed(uri) || !allowed(destParentPath) || !allowed(destPath))
+    if (/*!allowed(uri) ||*/ !allowed(destParentPath) || !allowed(destPath))
         return handleIssue(423, "Locked");
 
     // copy directory

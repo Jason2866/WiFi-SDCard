@@ -40,6 +40,7 @@
 #endif
 #include <functional>
 #include <ESP8266WiFi.h>
+#include <StreamString.h>
 
 class ESPWebDAV
 {
@@ -105,6 +106,7 @@ protected:
     bool allowed (const String& uri, const String& xml = emptyString);
     void makeToken (String& ret, uint32_t pash, uint32_t ownash);
     void extractLockToken (const String& someHeader, const char* start, const char* end, uint32_t& pash, uint32_t& ownash);
+    void getPayload (StreamString& payload);
 
     // variables pertaining to current most HTTP request being serviced
     WiFiServer* server;
