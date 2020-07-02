@@ -52,7 +52,7 @@ public:
     void handleClient(const String& blank = "");
     void rejectClient(const String& rejectMessage);
 
-    static void stripSlashes (String& name, bool front = false);
+    static void stripSlashes (String& name);
 
 protected:
     typedef void (ESPWebDAV::*THandlerFunction)(const String&);
@@ -101,7 +101,8 @@ protected:
     size_t readBytesWithTimeout(uint8_t *buf, size_t size);
     void processRange(const String& range);
 
-    bool allowed (const String& uri, const String& ref); // lock test
+    bool allowed (const String& uri, uint32_t ownash);
+    bool allowed (const String& uri, const String& xml = emptyString);
     void makeToken (String& ret, uint32_t pash, uint32_t ownash);
     void extractLockToken (const String& someHeader, const char* start, const char* end, uint32_t& pash, uint32_t& ownash);
 
@@ -120,7 +121,6 @@ protected:
     String      ifHeader;
     String      lockTokenHeader;
     DepthType   depth;
-    
 
     String 		_responseHeaders;
     bool		_chunked;
