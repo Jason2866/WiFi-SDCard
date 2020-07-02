@@ -18,14 +18,14 @@
 
 #if DBG_WEBDAV
 // debugging
-#define DBG_PRINT(...) 		{ Serial.print(__VA_ARGS__); }
-#define DBG_PRINTF(...) 	{ Serial.printf(__VA_ARGS__); }
-#define DBG_PRINTLN(...) 	{ Serial.println(__VA_ARGS__); }
+#define DBG_PRINT(...) 	    { Serial.print(__VA_ARGS__); }
+#define DBG_PRINTF(...)     { Serial.printf(__VA_ARGS__); }
+#define DBG_PRINTLN(...)    { Serial.println(__VA_ARGS__); }
 #else
 // production
-//#define DBG_PRINT(...)    { }
-//#define DBG_PRINTF(...)   { }
-//#define DBG_PRINTLN(...) 	{ }
+#define DBG_PRINT(...)      { }
+#define DBG_PRINTF(...)     { }
+#define DBG_PRINTLN(...)    { }
 #endif
 
 // constants for WebServer

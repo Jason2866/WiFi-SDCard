@@ -387,6 +387,7 @@ void ESPWebDAV::handleLock(ResourceType resource)
     DBG_PRINTLN("Processing LOCK");
 
     // does URI refer to an existing resource
+    (void)resource;
     DBG_PRINTF("r=%d/%d\n", resource, RESOURCE_NONE);
     //if (resource == RESOURCE_NONE)
     //    return handleIssue(404, "Not found");
@@ -663,7 +664,9 @@ void ESPWebDAV::handleGet(ResourceType resource, bool isGet)
     //if (!allowed(uri))
     //    return handleIssue(423, "Locked");
 
+#if DBG_WEBDAV
     long tStart = millis();
+#endif
     File file = gfs->open(uri, "r");
 
     sendHeader("Allow", "PROPFIND,OPTIONS,DELETE,COPY,MOVE,HEAD,POST,PUT,GET");
@@ -763,7 +766,9 @@ void ESPWebDAV::handlePut(ResourceType resource)
     if (contentLen != 0)
     {
         uint8_t buf[128];
+#if DBG_WEBDAV
         long tStart = millis();
+#endif
         size_t numRemaining = contentLen;
 
         // read data from stream and write to the file
@@ -866,7 +871,9 @@ void ESPWebDAV::handleMove(ResourceType resource, File& src)
 
     // ------------------------
     DBG_PRINTLN("Processing MOVE");
+#if DBG_WEBDAV
     dir("/", &Serial);
+#endif
 
     // does URI refer to anything
     if (   resource == RESOURCE_NONE
@@ -921,7 +928,9 @@ void ESPWebDAV::handleMove(ResourceType resource, File& src)
         return;
     }
 
+#if DBG_WEBDAV
     dir("/", &Serial);
+#endif
 
     DBG_PRINTLN("Move successful");
     sendHeader("Allow", "OPTIONS,MKCOL" SCLOCK ",POST,PUT");
@@ -941,7 +950,7 @@ bool ESPWebDAV::deleteDir (const String& dir)
             toRemove += '/';
             toRemove += entry.fileName();
             bool ok = !!(entry.isDirectory()? gfs->rmdir(toRemove): gfs->remove(toRemove));
-            Serial.printf("DELETE %s %s: %s\n", entry.isDirectory()?"[ dir]":"[file]",toRemove.c_str(), ok? "ok":"bad");
+            DBG_PRINTF("DELETE %s %s: %s\n", entry.isDirectory()?"[ dir]":"[file]",toRemove.c_str(), ok? "ok":"bad");
             return ok;
         });
 

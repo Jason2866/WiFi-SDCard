@@ -194,7 +194,7 @@ bool ESPWebDAV::parseRequest()
     }
 
     DBG_PRINTF("############################################\n");
-    DBG_PRINTF("RECV >>>> --------------------\n");
+    DBG_PRINTF(">>>>>>>>>> RECV\n");
     method = req.substring(0, addr_start);
     uri = urlDecode(req.substring(addr_start + 1, addr_end));
     DBG_PRINT("method: "); DBG_PRINT(method); DBG_PRINT(" url: "); DBG_PRINTLN(uri);
@@ -238,7 +238,7 @@ bool ESPWebDAV::parseRequest()
         else if (headerName.equalsIgnoreCase("Lock-Token"))
             lockTokenHeader = headerValue;
     }
-    DBG_PRINTF("-------------------- <<<< RECV\n");
+    DBG_PRINTF("<<<<<<<<<< RECV\n");
 
     return true;
 }
@@ -269,19 +269,21 @@ void ESPWebDAV::send(const String& code, const char* content_type, const String&
 
     client.write(header.c_str(), header.length());
 
-    DBG_PRINTF("SENT >>>> ----------------------\n");
+    DBG_PRINTF(">>>>>>>>>> SENT\n");
     DBG_PRINTF("---- header:\n%s", header.c_str());
 
     if (content.length())
     {
         sendContent(content);
+#if DBG_WEBDAV
         DBG_PRINTF("---- content (%d bytes):\n", (int)content.length());
         for (size_t i = 0; i < DEBUG_LEN && i < content.length(); i++)
             DBG_PRINTF("%c", content[i] < 32 || content[i] > 127 ? '.' : content[i]);
         if (content.length() > DEBUG_LEN) DBG_PRINTF("...");
         DBG_PRINTF("\n");
+#endif
     }
-    DBG_PRINTF("---------------------- <<<<< SENT\n");
+    DBG_PRINTF("<<<<<<<<<< SENT\n");
 }
 
 
