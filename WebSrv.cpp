@@ -160,6 +160,7 @@ void ESPWebDAV::processClient(THandlerFunction handler, const String& message)
 void ESPWebDAV::processRange(const String& range)
 {
     // "Range": "bytes=0-5"
+    // "Range": "bytes=0-"
 
     size_t i = 0;
     while (i < range.length() && (range[i] < '0' || range[i] > '9'))
@@ -170,7 +171,10 @@ void ESPWebDAV::processRange(const String& range)
     if (j > i)
     {
         _rangeStart = atoi(&range.c_str()[i]);
-        _rangeEnd = atoi(&range.c_str()[j + 1]);
+        if (range.c_str()[j + 1])
+            _rangeEnd = atoi(&range.c_str()[j + 1]);
+        else
+            _rangeEnd = -1;
     }
     DBG_PRINTF("Range: %d -> %d\n", _rangeStart, _rangeEnd);
 }
@@ -316,41 +320,52 @@ void ESPWebDAV::_prepareHeader(String& response, const String& code, const char*
 
 
 // ------------------------
-void ESPWebDAV::sendContent(const String& content)
+bool ESPWebDAV::sendContent(const String& content)
+{
+    return sendContent(content.c_str(), content.length());
+}
+
+bool ESPWebDAV::sendContent(const char* data, size_t size)
 {
     // ------------------------
-    const char * footer = "\r\n";
-    size_t size = content.length();
-
     if (_chunked)
     {
         char chunkSize[32];
-        snprintf(chunkSize, sizeof(chunkSize), "%x%s", (int)size, footer);
-        client.write(chunkSize, strlen(chunkSize));
+        snprintf(chunkSize, sizeof(chunkSize), "%x\r\n", (int)size);
+        size_t l = strlen(chunkSize);
+        if (client.write(chunkSize, l) != l)
+            return false;
+        DBG_PRINTF("---- chunk %s\n", chunkSize);
+
+        //XXXFIXME client.printf("%x...
     }
 
-    DBG_PRINTF("---- %scontent (%d bytes):\n", _chunked ? "chunked " : "", (int)content.length());
-    for (size_t i = 0; i < DEBUG_LEN && i < content.length(); i++)
-        DBG_PRINTF("%c", content[i] < 32 || content[i] > 127 ? '.' : content[i]);
-    if (content.length() > DEBUG_LEN) DBG_PRINTF("...");
+    DBG_PRINTF("---- %scontent (%d bytes):\n", _chunked ? "chunked " : "", (int)size);
+    for (size_t i = 0; i < DEBUG_LEN && i < size; i++)
+        DBG_PRINTF("%c", data[i] < 32 || data[i] > 127 ? '.' : data[i]);
+    if (size > DEBUG_LEN) DBG_PRINTF("...");
     DBG_PRINTF("\n");
 
-    client.write(content.c_str(), size);
+    if (client.write(data, size) != size)
+        return false;
 
     if (_chunked)
     {
-        client.write(footer, 2);
+        if (client.write("\r\n", 2) != 2)
+            return false;
         if (size == 0)
         {
             _chunked = false;
         }
     }
+
+    return true;
 }
 
 
 
 // ------------------------
-void ESPWebDAV::sendContent_P(PGM_P content)
+bool  ESPWebDAV::sendContent_P(PGM_P content)
 {
     // ------------------------
     const char * footer = "\r\n";
@@ -360,19 +375,25 @@ void ESPWebDAV::sendContent_P(PGM_P content)
     {
         char chunkSize[32];
         snprintf(chunkSize, sizeof(chunkSize), "%x%s", (int)size, footer);
-        client.write(chunkSize, strlen(chunkSize));
+        size_t l = strlen(chunkSize);
+        if (client.write(chunkSize, l) != l)
+            return false;
     }
 
-    client.write_P(content, size);
+    if (client.write_P(content, size) != size)
+        return false;
 
     if (_chunked)
     {
-        client.write(footer, 2);
+        if (client.write(footer, 2) != 2)
+            return false;
         if (size == 0)
         {
             _chunked = false;
         }
     }
+
+    return true;
 }
 
 

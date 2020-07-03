@@ -4,5 +4,7 @@ cd ${ESP8266ARDUINO}/tests/host
 cmd="$1"
 [ "$cmd" = run ] && cmd=""
 shift
-make ULIBDIRS=$LIBS FORCE32=0 V=1 D=1 ${EX}/Simple && $cmd ./bin/Simple/Simple "$@"
+set -ex
+make ULIBDIRS=$LIBS FORCE32=0 V=0 D=0 ${EX}/Simple
+$cmd ./bin/Simple/Simple "$@"
 stty sane

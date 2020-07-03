@@ -33,8 +33,6 @@
 #define CONTENT_LENGTH_NOT_SET ((size_t) -2)
 #define HTTP_MAX_POST_WAIT 		5000
 
-// must be fixed: https://github.com/nextcloud/server/issues/17275#issuecomment-535501157
-
 #if WEBDAV_LOCK_SUPPORT > 1
 #include <map>
 #endif
@@ -96,8 +94,9 @@ protected:
     void sendHeader(const String& name, const String& value, bool first = false);
     void send(const String& code, const char* content_type, const String& content);
     void _prepareHeader(String& response, const String& code, const char* content_type, size_t contentLength);
-    void sendContent(const String& content);
-    void sendContent_P(PGM_P content);
+    bool sendContent(const String& content);
+    bool sendContent_P(PGM_P content);
+    bool sendContent(const char* data, size_t size);
     void setContentLength(size_t len);
     size_t readBytesWithTimeout(uint8_t *buf, size_t size);
     void processRange(const String& range);
@@ -107,10 +106,12 @@ protected:
     void makeToken (String& ret, uint32_t pash, uint32_t ownash);
     void extractLockToken (const String& someHeader, const char* start, const char* end, uint32_t& pash, uint32_t& ownash);
     void getPayload (StreamString& payload);
+    void stripName (String& name);
 
     // variables pertaining to current most HTTP request being serviced
     WiFiServer* server;
     FS*         gfs;
+    int         _maxPathLength;
 
     WiFiClient 	client;
     String 		method;

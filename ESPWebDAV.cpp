@@ -33,6 +33,8 @@ void ESPWebDAV::stripSlashes(String& name)
             i++;
 }
 
+#if WEBDAV_LOCK_SUPPORT
+
 void ESPWebDAV::makeToken (String& ret, uint32_t pash, uint32_t ownash)
 {
     char lock_token[17];
@@ -69,6 +71,8 @@ void ESPWebDAV::extractLockToken (const String& someHeader, const char* start, c
     DBG_PRINTF("IfToken: '%s' (0x%08x / 0x%08x)\n", cp, pash, ownash);
 }
 
+#endif // WEBDAV_LOCK_SUPPORT
+
 bool ESPWebDAV::allowed (const String& uri, uint32_t ownash)
 {
 #if WEBDAV_LOCK_SUPPORT > 1
@@ -92,9 +96,13 @@ bool ESPWebDAV::allowed (const String& uri, uint32_t ownash)
     }
     DBG_PRINTF("lock: none found\n");
     return true;
+
 #else
+
     (void)uri;
+    (void)ownash;
     return true;
+
 #endif
 }
 
@@ -110,6 +118,19 @@ bool ESPWebDAV::allowed (const String& uri, const String& xml)
         anyownash = startIdx > 0 && endIdx > 0? crc32(&(xml.c_str()[startIdx + 7]), endIdx - startIdx - 7): 0;
     }
     return allowed(uri, anyownash);
+}
+
+void ESPWebDAV::stripName (String& name)
+{
+    if (name.length() > (size_t)_maxPathLength)
+    {
+        int dot = name.lastIndexOf('.');
+        int newDot = _maxPathLength - (name.length() - dot);
+        if (dot <= 0 || newDot < 0)
+            name.remove(_maxPathLength);
+        else
+            name.remove(newDot, dot - newDot);
+    }
 }
 
 void ESPWebDAV::dir (const String& path, Print* out)
@@ -199,6 +220,12 @@ void ESPWebDAV::begin(WiFiServer* server, FS* gfs)
 {
     this->server = server;
     this->gfs = gfs;
+
+    fs::FSInfo64 info;
+    if (gfs->info64(info))
+        _maxPathLength = info.maxPathLength;
+    else
+        _maxPathLength = 16;
 }
 
 // ------------------------
@@ -245,13 +272,13 @@ void ESPWebDAV::handleReject(const String& rejectMessage)
         sendHeader("Allow", "PROPFIND,OPTIONS,DELETE,COPY,MOVE");
         setContentLength(CONTENT_LENGTH_UNKNOWN);
         send("207 Multi-Status", "application/xml;charset=utf-8", "");
-        sendContent(F("<?xml version=\"1.0\" encoding=\"utf-8\"?><D:multistatus xmlns:D=\"DAV:\"><D:response><D:href>/</D:href><D:propstat><D:status>HTTP/1.1 200 OK</D:status><D:prop><D:getlastmodified>Fri, 30 Nov 1979 00:00:00 GMT</D:getlastmodified><D:getetag>\"3333333333333333333333333333333333333333\"</D:getetag><D:resourcetype><D:collection/></D:resourcetype></D:prop></D:propstat></D:response>"));
+        sendContent(F("<?xml version=\"1.0\" encoding=\"utf-8\"?><D:multistatus xmlns:D=\"DAV:\"><D:response><D:href>/</D:href><D:propstat><D:status>HTTP/1.0 200 OK</D:status><D:prop><D:getlastmodified>Fri, 30 Nov 1979 00:00:00 GMT</D:getlastmodified><D:getetag>\"3333333333333333333333333333333333333333\"</D:getetag><D:resourcetype><D:collection/></D:resourcetype></D:prop></D:propstat></D:response>"));
 
         if (depthHeader.equals("1"))
         {
             sendContent(F("<D:response><D:href>/"));
             sendContent(rejectMessage);
-            sendContent(F("</D:href><D:propstat><D:status>HTTP/1.1 200 OK</D:status><D:prop><D:getlastmodified>Fri, 01 Apr 2016 16:07:40 GMT</D:getlastmodified><D:getetag>\"2222222222222222222222222222222222222222\"</D:getetag><D:resourcetype/><D:getcontentlength>0</D:getcontentlength><D:getcontenttype>application/octet-stream</D:getcontenttype></D:prop></D:propstat></D:response>"));
+            sendContent(F("</D:href><D:propstat><D:status>HTTP/1.0 200 OK</D:status><D:prop><D:getlastmodified>Fri, 01 Apr 2016 16:07:40 GMT</D:getlastmodified><D:getetag>\"2222222222222222222222222222222222222222\"</D:getetag><D:resourcetype/><D:getcontentlength>0</D:getcontentlength><D:getcontenttype>application/octet-stream</D:getcontenttype></D:prop></D:propstat></D:response>"));
         }
 
         sendContent(F("</D:multistatus>"));
@@ -373,6 +400,12 @@ void ESPWebDAV::handleOptions(ResourceType resource)
     (void)resource;
     // ------------------------
     DBG_PRINTLN("Processing OPTION");
+
+#if DBG_WEBDAV
+    StreamString inXML;
+    getPayload(inXML);
+#endif
+
     sendHeader("Allow", "PROPFIND,GET,DELETE,PUT,COPY,MOVE");
     send("200 OK", NULL, "");
 }
@@ -397,10 +430,6 @@ void ESPWebDAV::handleLock(ResourceType resource)
 
     StreamString inXML;
     getPayload(inXML);
-
-    DBG_PRINTLN(">>>>> payload");
-    DBG_PRINTLN(inXML);
-    DBG_PRINTLN("<<<<< payload");
 
 #if WEBDAV_LOCK_SUPPORT > 1
     // lock owner
@@ -568,14 +597,14 @@ void ESPWebDAV::handleProp(ResourceType resource, File& file)
 
     if (file.isFile() || depth == DEPTH_NONE)
     {
-        DBG_PRINTF("----- RESOURCE FILE '%s':\n", uri.c_str());
+        DBG_PRINTF("----- PROP FILE '%s':\n", uri.c_str());
         sendPropResponse(file.isDirectory(), uri.c_str(), file.size(), file.getLastWrite());
     }
     else
     {
-        DBG_PRINTF("----- OPENING resource '%s':\n", uri.c_str());
+        DBG_PRINTF("----- PROP DIR '%s':\n", uri.c_str());
+        ////XXX FIXME DEPTH=oo must walk the tree
         Dir entry = gfs->openDir(uri);
-        // append children information to message
         while (entry.next())
         {
             yield();
@@ -629,7 +658,7 @@ void ESPWebDAV::sendPropResponse(bool isDir, const String& fullResPath, size_t s
     sendContent(blah);
 
     sendProp1Response(F("getlastmodified"), fileTimeStamp.c_str());
-    sendProp1Response(F("getetag"), sha1(fullResPath + fileTimeStamp));
+    sendProp1Response(F("getetag"), sha1(fullResPath + fileTimeStamp)); // XXX <= use crc32 like the others
 
     DBG_PRINTF("-----\nentry: '%s'(dir:%d) date: '%s'\n-----\n",
         fullResPath.c_str(), isDir,
@@ -638,12 +667,21 @@ void ESPWebDAV::sendPropResponse(bool isDir, const String& fullResPath, size_t s
     if (isDir)
     {
         sendProp1Response(F("resourcetype"), F("<D:collection/>"));
+
+        fs::FSInfo64 info;
+        if (gfs->info64(info))
+        {
+            sendProp1Response("quota-available-bytes", String(1.0 * info.totalBytes, 0));
+            sendProp1Response("quota-used-bytes", String(1.0 * info.usedBytes, 0));
+        }
     }
     else
     {
         sendProp1Response(F("getcontentlength"), String(size));
         sendProp1Response(F("getcontenttype"), getMimeType(fullResPath));
     }
+
+    //sendProp1Response(F("displayname"), "yeah");
 
     sendContent(F("</D:response>"));
 }
@@ -661,8 +699,7 @@ void ESPWebDAV::handleGet(ResourceType resource, bool isGet)
     if (resource != RESOURCE_FILE)
         return handleIssue(404, "Not found");
 
-    //if (!allowed(uri))
-    //    return handleIssue(423, "Locked");
+    // no lock on GET
 
 #if DBG_WEBDAV
     long tStart = millis();
@@ -688,33 +725,42 @@ void ESPWebDAV::handleGet(ResourceType resource, bool isGet)
     // Content-Range: bytes 0-1023/146515
     // Content-Length: 1024
 
+    constexpr bool chunked = false;
+
     int remaining;
-    if (_rangeEnd == -1)
+    if (_rangeStart == 0 && (_rangeEnd < 0 || _rangeEnd == (int)fileSize - 1))
     {
         _rangeEnd = fileSize - 1;
         remaining = fileSize;
-        setContentLength(remaining);
+        setContentLength(chunked? CONTENT_LENGTH_UNKNOWN: remaining);
         send("200 OK", contentType.c_str(), "");
     }
     else
     {
+        if (_rangeEnd == -1)
+        {
+            _rangeEnd = _rangeStart + (2*TCP_MSS - 100);
+            if (_rangeEnd >= (int)fileSize)
+                _rangeEnd = fileSize - 1;
+        }
         snprintf(buf, sizeof(buf), "bytes %d-%d/%d", _rangeStart, _rangeEnd, (int)fileSize);
         sendHeader("Content-Range", buf);
         remaining = _rangeEnd - _rangeStart + 1;
-        setContentLength(remaining);
+        setContentLength(chunked? CONTENT_LENGTH_UNKNOWN: remaining);
         send("206 Partial Content", contentType.c_str(), "");
     }
 
     if (isGet && file.seek(_rangeStart, SeekSet))
     {
-        DBG_PRINTF("GET:");
+        DBG_PRINTF("GET: (%d bytes, chunked=%d, remain=%d)", remaining, chunked, remaining);
         while (remaining > 0 && file.available())
         {
-            // SD read speed ~ 17sec for 4.5MB file
             size_t toRead = (size_t)remaining > sizeof(buf) ? sizeof(buf) : remaining;
             size_t numRead = file.read((uint8_t*)buf, toRead);
             DBG_PRINTF("read %d bytes from file\n", (int)numRead);
-            if (client.write(buf, numRead) != numRead)
+
+            if (   ( chunked && !sendContent(buf, numRead))
+                || (!chunked && client.write(buf, numRead) != numRead))
             {
                 DBG_PRINTF("file->net short transfer");
                 ///XXXX transmit error ?
@@ -754,6 +800,7 @@ void ESPWebDAV::handlePut(ResourceType resource)
     sendHeader("Allow", "PROPFIND,OPTIONS,DELETE,COPY,MOVE,HEAD,POST,PUT,GET");
 
     File file;
+    stripName(uri);
     DBG_PRINTF("create file '%s'\n", uri.c_str());
     if (!(file = gfs->open(uri, "w")))
         return handleWriteError("Unable to create a new file", file);
@@ -884,17 +931,19 @@ void ESPWebDAV::handleMove(ResourceType resource, File& src)
 
     String dest = urlToUri(destinationHeader);
     stripSlashes(dest);
-    File destFile = gfs->open(dest, "r");
+    stripName(dest);
     DBG_PRINT("Move destination: "); DBG_PRINTLN(dest);
 
     if (!allowed(uri) || !allowed(dest))
         return handleIssue(423, "Locked");
 
+    File destFile = gfs->open(dest, "r");
     if (destFile && !destFile.isFile())
     {
         dest += '/';
         dest += src.name();
         stripSlashes(dest);
+        stripName(dest);
         destFile.close();
         destFile = gfs->open(dest, "r");
         successCode = "204 No Content"; // MOVE to existing collection resource didn't give 204
@@ -1092,6 +1141,7 @@ void ESPWebDAV::handleCopy(ResourceType resource, File& src)
         destParentPath.c_str());
     File destParent = gfs->open(destParentPath, "r");
 
+    stripName(destPath);
     if (/*!allowed(uri) ||*/ !allowed(destParentPath) || !allowed(destPath))
         return handleIssue(423, "Locked");
 
@@ -1109,8 +1159,10 @@ void ESPWebDAV::handleCopy(ResourceType resource, File& src)
             {
                 (void)depth;
                 (void)parent;
-                DBG_PRINTF("COPY: '%s' -> '%s'\n", source.fileName().c_str(), (destParentPath + '/' + source.fileName()).c_str());
-                return copyFile(gfs->open(source.fileName(), "r"), destParentPath + '/' + source.fileName());
+                String destNameX = destParentPath + '/' + source.fileName();
+                stripName(destNameX);
+                DBG_PRINTF("COPY: '%s' -> '%s'\n", source.fileName().c_str(), destNameX.c_str());
+                return copyFile(gfs->open(source.fileName(), "r"), destNameX);
             }))
         {
             return handleIssue(402, "Payment Required");

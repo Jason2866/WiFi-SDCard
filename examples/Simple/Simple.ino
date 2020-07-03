@@ -96,6 +96,9 @@ void loop()
             Serial.println("Success");
         else
             Serial.println("Failure");
+        auto f = gfs.open("readme.md", "w");
+        f.printf("hello\n");
+        f.close();
     }
     else if (c == 'D')
     {
