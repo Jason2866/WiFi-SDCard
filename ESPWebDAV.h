@@ -43,6 +43,7 @@
 class ESPWebDAV
 {
 public:
+
     enum ResourceType { RESOURCE_NONE, RESOURCE_FILE, RESOURCE_DIR };
     enum DepthType { DEPTH_NONE, DEPTH_CHILD, DEPTH_ALL };
 
@@ -53,16 +54,19 @@ public:
 
     static void stripSlashes (String& name);
 
-protected:
-    typedef void (ESPWebDAV::*THandlerFunction)(const String&);
-
     bool dirAction (
         const String& path,
         bool recursive,
         const std::function<bool(int depth, const String& parent, Dir& entry)>& cb,
+        bool callAfter = true,
         int depth = 0);
 
     void dir (const String& path, Print* out);
+
+protected:
+
+    typedef void (ESPWebDAV::*THandlerFunction)(const String&);
+
     bool copyFile (File file, const String& destName);
     bool deleteDir (const String& dir);
 

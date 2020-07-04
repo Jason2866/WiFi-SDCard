@@ -135,20 +135,17 @@ void ESPWebDAV::stripName (String& name)
 
 void ESPWebDAV::dir (const String& path, Print* out)
 {
-    out->printf(">>>>>>>> dir '%s'\n", path.c_str());
     dirAction(path, true, [out](int depth, const String& parent, Dir& entry)->bool
         {
-            (void)depth;
-            //for (int i = 0; i < depth; i++)
-            //    out->print("   ");
-            out->printf("%c%s/%s%c\n",
-                entry.isDirectory()?'[':' ',
-                parent.c_str(),
+            (void)parent;
+            for (int i = 0; i < depth; i++)
+                out->print("    ");
+            out->printf("%s%s%s\n",
+                entry.isDirectory()?"[":"",
                 entry.fileName().c_str(),
-                entry.isDirectory()?']':' ');
+                entry.isDirectory()?"/]":"");
             return true;
-        });
-    out->printf("<<<<<<<< dir\n");
+        }, /*false=subdir first*/false);
 }
 
 void ESPWebDAV::getPayload (StreamString& payload)
@@ -171,7 +168,11 @@ void ESPWebDAV::getPayload (StreamString& payload)
     }
 }
 
-bool ESPWebDAV::dirAction (const String& path, bool recursive, const std::function<bool(int depth, const String& parent, Dir& entry)>& cb, int depth)
+bool ESPWebDAV::dirAction (const String& path,
+                           bool recursive,
+                           const std::function<bool(int depth, const String& parent, Dir& entry)>& cb,
+                           bool callAfter,
+                           int depth)
 {
     //DBG_PRINTF("diraction: scanning dir '%s'\n", path.c_str());
     Dir entry = gfs->openDir(path);
@@ -198,8 +199,9 @@ bool ESPWebDAV::dirAction (const String& path, bool recursive, const std::functi
             if (entry.isDirectory())
             {
                 //DBG_PRINTF("diraction: -------- %s/%s/\n", path.c_str(), entry.fileName().c_str());
-                if (   dirAction(path + '/' + entry.fileName(), recursive, cb, depth + 1)
-                    && cb(depth, path, entry))
+                if (   ( callAfter || cb(depth, path, entry))
+                    && dirAction(path + '/' + entry.fileName(), recursive, cb, callAfter, depth + 1)
+                    && (!callAfter || cb(depth, path, entry)))
                 {
                     //DBG_PRINTF("(dir-OK)\n");
                 }
@@ -604,6 +606,7 @@ void ESPWebDAV::handleProp(ResourceType resource, File& file)
     {
         DBG_PRINTF("----- PROP DIR '%s':\n", uri.c_str());
         ////XXX FIXME DEPTH=oo must walk the tree
+        sendPropResponse(true, ".", 0, 0);
         Dir entry = gfs->openDir(uri);
         while (entry.next())
         {

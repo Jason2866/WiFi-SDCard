@@ -61,51 +61,40 @@ void setup()
     Serial.println("WebDAV server started");
 }
 
-
-int listDir(const String& indent, const String& path)
-{
-    int dirCount = 0;
-    Dir dir = gfs.openDir(path);
-    while (dir.next())
-    {
-        ++dirCount;
-        if (dir.isDirectory())
-        {
-            Serial.printf_P(PSTR("%s%s [Dir]\n"), indent.c_str(), dir.fileName().c_str());
-            dirCount += listDir(indent + "  ", path + dir.fileName() + "/");
-        }
-        else
-            Serial.printf_P(PSTR("%s%-16s (%u Bytes)\n"), indent.c_str(), dir.fileName().c_str(), (uint32_t)dir.fileSize());
-    }
-    return dirCount;
-}
-
 void help()
 {
-    Serial.printf("interactive: F/ormat D/ir\n");
+    Serial.printf("interactive: F/ormat D/ir C/reateFile\n");
 }
 
 // ------------------------
 void loop()
 {
     int c = Serial.read();
-    if (c == 'F')
+    if (c > 0)
     {
-        Serial.println("formatting...");
-        if (gfs.format())
-            Serial.println("Success");
+        if (c == 'F')
+        {
+            Serial.println("formatting...");
+            if (gfs.format())
+                Serial.println("Success");
+            else
+                Serial.println("Failure");
+        }
+        else if (c == 'D')
+        {
+            Serial.printf(">>>>>>>> dir /\n");
+            dav.dir("/", &Serial);
+            Serial.printf("<<<<<<<< dir\n");
+        }
+        else if (c == 'C')
+        {
+            auto f = gfs.open("readme.md", "w");
+            f.printf("hello\n");
+            f.close();
+        }
         else
-            Serial.println("Failure");
-        auto f = gfs.open("readme.md", "w");
-        f.printf("hello\n");
-        f.close();
+            help();
     }
-    else if (c == 'D')
-    {
-        Serial.printf("-> %d dir/files\n", listDir("", "/"));
-    }
-    else if (c > 0)
-        help();
 
     // ------------------------
     if (dav.isClientWaiting())
