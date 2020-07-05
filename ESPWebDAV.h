@@ -114,7 +114,7 @@ protected:
     void handleUnlock(ResourceType resource);
     void handlePropPatch(ResourceType resource, File& file);
     void handleProp(ResourceType resource, File& file);
-    void handleGet(ResourceType resource, bool isGet);
+    void handleGet(ResourceType resource, File& file, bool isGet);
     void handlePut(ResourceType resource);
     void handleWriteError(const String& message, File& wFile);
     void handleDirectoryCreate(ResourceType resource);
@@ -146,6 +146,10 @@ protected:
     void extractLockToken (const String& someHeader, const char* start, const char* end, uint32_t& pash, uint32_t& ownash);
     void getPayload (StreamString& payload);
     void stripName (String& name);
+
+    enum virt_e { VIRT_NONE, VIRT_PROC };
+    virt_e isVirtual (const String& uri);
+    size_t makeVirtual (virt_e v, String& internal);
 
     // variables pertaining to current most HTTP request being serviced
     WiFiServer* server;

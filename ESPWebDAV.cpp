@@ -51,6 +51,8 @@ const char *wdays[]  = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 #define SCUNLOCK ""
 #endif
 
+#define PROC "proc"
+
 void ESPWebDAV::stripSlashes(String& name)
 {
     size_t i = 0;
@@ -174,6 +176,26 @@ void ESPWebDAV::dir (const String& path, Print* out)
                 entry.isDirectory()?"/]":"");
             return true;
         }, /*false=subdir first*/false);
+}
+
+size_t ESPWebDAV::makeVirtual (virt_e v, String& internal)
+{
+    if (v == VIRT_PROC)
+    {
+        internal = ESP.getFullVersion();
+        internal += '\n';
+    }
+    return internal.length();
+}
+
+ESPWebDAV::virt_e ESPWebDAV::isVirtual (const String& uri)
+{
+    const char* n = &(uri.c_str()[0]);
+    while (*n && *n == '/')
+        n++;
+    if (strcmp(n, PROC) == 0)
+        return VIRT_PROC;
+    return VIRT_NONE;
 }
 
 void ESPWebDAV::getPayload (StreamString& payload)
@@ -322,12 +344,6 @@ void ESPWebDAV::handleReject(const String& rejectMessage)
 }
 
 
-
-
-// set http_proxy=http://localhost:36036
-// curl -v -X PROPFIND -H "Depth: 1" http://Rigidbot/Old/PipeClip.gcode
-// Test PUT a file: curl -v -T c.txt -H "Expect:" http://Rigidbot/c.txt
-// C:\Users\gsbal>curl -v -X LOCK http://Rigidbot/EMA_CPP_TRCC_Tutorial/Consumer.cpp -d "<?xml version=\"1.0\" encoding=\"utf-8\" ?><D:lockinfo xmlns:D=\"DAV:\"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype><D:owner><D:href>CARBON2\gsbal</D:href></D:owner></D:lockinfo>"
 // ------------------------
 void ESPWebDAV::handleRequest(const String& blank)
 {
@@ -377,10 +393,10 @@ void ESPWebDAV::handleRequest(const String& blank)
         return handleProp(resource, file);
 
     if (method.equals("GET"))
-        return handleGet(resource, true);
+        return handleGet(resource, file, true);
 
     if (method.equals("HEAD"))
-        return handleGet(resource, false);
+        return handleGet(resource, file, false);
 
     // handle options
     if (method.equals("OPTIONS"))
@@ -452,11 +468,8 @@ void ESPWebDAV::handleLock(ResourceType resource)
     // does URI refer to an existing resource
     (void)resource;
     DBG_PRINTF("r=%d/%d\n", resource, RESOURCE_NONE);
-    //if (resource == RESOURCE_NONE)
-    //    return handleIssue(404, "Not found");
 
     sendHeader("Allow", "PROPPATCH,PROPFIND,OPTIONS,DELETE" SCUNLOCK ",COPY" SCLOCK ",MOVE,HEAD,POST,PUT,GET");
-    //sendHeader("Lock-Token", "urn:uuid:26e57cb3-834d-191a-00de-000042bdecf9");
 
     StreamString inXML;
     getPayload(inXML);
@@ -560,11 +573,8 @@ void ESPWebDAV::handleUnlock(ResourceType resource)
     uint32_t pash = crc32(uri.c_str(), uri.length());
 
     uint32_t hpash, hownash;
-    //extractLockToken(ifHeader, "(<", ">", hpash, hownash);
     extractLockToken(lockTokenHeader, "<", ">", hpash, hownash);
 
-    //String lock_token;
-    //makeToken(lock_token, pash, hownash);
     auto lock = _locks.find(pash);
     if (lock == _locks.end())
     {
@@ -583,7 +593,6 @@ void ESPWebDAV::handleUnlock(ResourceType resource)
     // ------------------------
     DBG_PRINTLN("Processing UNLOCK");
     sendHeader("Allow", "PROPPATCH,PROPFIND,OPTIONS,DELETE,UNLOCK,COPY,LOCK,MOVE,HEAD,POST,PUT,GET");
-//    sendHeader("Lock-Token", lock_token);
     send("204 No Content", NULL, "");
 }
 
@@ -604,13 +613,18 @@ void ESPWebDAV::handleProp(ResourceType resource, File& file)
 {
     // ------------------------
     DBG_PRINTLN("Processing PROPFIND");
+    auto v = isVirtual(uri);
 
     StreamString payload;
     getPayload(payload);
-
+    if (v)
+    {
+        resource = RESOURCE_FILE;
+    }
     // does URI refer to an existing resource
-    if (resource == RESOURCE_NONE)
-        return handleIssue(404, "Not found");
+    else
+        if (resource == RESOURCE_NONE)
+            return handleIssue(404, "Not found");
 
     if (payload.indexOf("lockdiscovery") < 0 && !allowed(uri))
         return handleIssue(423, "Locked");
@@ -625,7 +639,12 @@ void ESPWebDAV::handleProp(ResourceType resource, File& file)
     sendContent(F("<?xml version=\"1.0\" encoding=\"utf-8\"?>"));
     sendContent(F("<D:multistatus xmlns:D=\"DAV:\">"));
 
-    if (file.isFile() || depth == DEPTH_NONE)
+    if (v)
+    {
+        // virtual file
+        sendPropResponse(false, uri.c_str(), 1024, time(nullptr));
+    }
+    else if (file.isFile() || depth == DEPTH_NONE)
     {
         DBG_PRINTF("----- PROP FILE '%s':\n", uri.c_str());
         sendPropResponse(file.isDirectory(), uri.c_str(), file.size(), file.getLastWrite());
@@ -634,7 +653,13 @@ void ESPWebDAV::handleProp(ResourceType resource, File& file)
     {
         DBG_PRINTF("----- PROP DIR '%s':\n", uri.c_str());
         ////XXX FIXME DEPTH=oo must walk the tree
-        sendPropResponse(true, ".", 0, 0);
+
+        if (uri.length() == 0 || (uri.length() == 1 && uri[0] == '/'))
+        {
+            ///XXX fixme: more generic way to list virtual file list
+            sendPropResponse(false, PROC, 1024, time(nullptr));
+        }
+
         Dir entry = gfs->openDir(uri);
         while (entry.next())
         {
@@ -718,16 +743,15 @@ void ESPWebDAV::sendPropResponse(bool isDir, const String& fullResPath, size_t s
 }
 
 
-
-
 // ------------------------
-void ESPWebDAV::handleGet(ResourceType resource, bool isGet)
+void ESPWebDAV::handleGet(ResourceType resource, File& file, bool isGet)
 {
     // ------------------------
     DBG_PRINTF("Processing GET (ressource=%d)\n", (int)resource);
+    auto v = isVirtual(uri);
 
     // does URI refer to an existing file resource
-    if (resource != RESOURCE_FILE)
+    if (resource != RESOURCE_FILE && !v)
         return handleIssue(404, "Not found");
 
     // no lock on GET
@@ -735,7 +759,6 @@ void ESPWebDAV::handleGet(ResourceType resource, bool isGet)
 #if DBG_WEBDAV
     long tStart = millis();
 #endif
-    File file = gfs->open(uri, "r");
 
     sendHeader("Allow", "PROPFIND,OPTIONS,DELETE,COPY,MOVE,HEAD,POST,PUT,GET");
     size_t fileSize = file.size();
@@ -743,7 +766,12 @@ void ESPWebDAV::handleGet(ResourceType resource, bool isGet)
     if (uri.endsWith(".gz") && contentType != "application/x-gzip" && contentType != "application/octet-stream")
         sendHeader("Content-Encoding", "gzip");
 
-    if (!fileSize)
+    String internal = emptyString;
+    if (v)
+    {
+        fileSize = makeVirtual(v, internal);
+    }
+    else if (!fileSize)
     {
         setContentLength(0);
         send("200 OK", contentType.c_str(), "");
@@ -768,7 +796,7 @@ void ESPWebDAV::handleGet(ResourceType resource, bool isGet)
     }
     else
     {
-        if (_rangeEnd == -1)
+        if (_rangeEnd == -1 || _rangeEnd >= (int)fileSize)
         {
             _rangeEnd = _rangeStart + (2*TCP_MSS - 100);
             if (_rangeEnd >= (int)fileSize)
@@ -781,33 +809,44 @@ void ESPWebDAV::handleGet(ResourceType resource, bool isGet)
         send("206 Partial Content", contentType.c_str(), "");
     }
 
-    if (isGet && file.seek(_rangeStart, SeekSet))
+    if (isGet && (internal.length() || file.seek(_rangeStart, SeekSet)))
     {
         DBG_PRINTF("GET: (%d bytes, chunked=%d, remain=%d)", remaining, chunked, remaining);
-        while (remaining > 0 && file.available())
+        
+        if (internal.length())
         {
-            size_t toRead = (size_t)remaining > sizeof(buf) ? sizeof(buf) : remaining;
-            size_t numRead = file.read((uint8_t*)buf, toRead);
-            DBG_PRINTF("read %d bytes from file\n", (int)numRead);
-
-            if (   ( chunked && !sendContent(buf, numRead))
-                || (!chunked && client.write(buf, numRead) != numRead))
+            printf("GLO %s %d %d\n", internal.c_str(), (int)_rangeStart, (int)remaining);
+            if (   ( chunked && !sendContent(&internal.c_str()[_rangeStart], remaining))
+                || (!chunked && client.write(&internal.c_str()[_rangeStart], remaining) != (size_t)remaining))
             {
                 DBG_PRINTF("file->net short transfer");
-                ///XXXX transmit error ?
-                //return handleWriteRead("Unable to send file content", &file);
-                break;
             }
-
-#if DBG_WEBDAV
-            for (size_t i = 0; i < 80 && i < numRead; i++)
-                DBG_PRINTF("%c", buf[i] < 32 || buf[i] > 127 ? '.' : buf[i]);
-#endif
-
-            remaining -= numRead;
-            DBG_PRINTF("wrote %d bytes to http client\n", (int)numRead);
         }
-    }
+        else
+            while (remaining > 0 && file.available())
+            {
+                size_t toRead = (size_t)remaining > sizeof(buf) ? sizeof(buf) : remaining;
+                size_t numRead = file.read((uint8_t*)buf, toRead);
+                DBG_PRINTF("read %d bytes from file\n", (int)numRead);
+
+                if (   ( chunked && !sendContent(buf, numRead))
+                    || (!chunked && client.write(buf, numRead) != numRead))
+                {
+                    DBG_PRINTF("file->net short transfer");
+                    ///XXXX transmit error ?
+                    //return handleWriteRead("Unable to send file content", &file);
+                    break;
+                }
+
+    #if DBG_WEBDAV
+                for (size_t i = 0; i < 80 && i < numRead; i++)
+                    DBG_PRINTF("%c", buf[i] < 32 || buf[i] > 127 ? '.' : buf[i]);
+    #endif
+
+                remaining -= numRead;
+                DBG_PRINTF("wrote %d bytes to http client\n", (int)numRead);
+            }
+        }
 
     DBG_PRINT("File "); DBG_PRINT(fileSize); DBG_PRINT(" bytes sent in: "); DBG_PRINT((millis() - tStart) / 1000); DBG_PRINTLN(" sec");
 }
