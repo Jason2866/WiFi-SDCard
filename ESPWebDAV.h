@@ -1,26 +1,61 @@
+/*
+ * Copyright (c) 2018 Gurpreet Bal https://github.com/ardyesp/ESPWebDAV
+ * Copyright (c) 2020 David Gauchard https://github.com/d-a-v/ESPWebDAV
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT
+ * SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
+ * OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
+ * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY
+ * OF SUCH DAMAGE.
+ *
+ */
 
 #ifndef __ESPWEBDAV_H
 #define __ESPWEBDAV_H
 
-#ifdef WEBDAV_LOCK_SUPPORT
-#error WEBDAV_LOCK_SUPPORT: cannot be defined by user
+#if defined(WEBDAV_LOCK_SUPPORT) || defined(DBG_WEBDAV)
+#error WEBDAV_LOCK_SUPPORT or DBG_WEBDAV: cannot be defined by user
 #endif
 
-// LOCK support is not robust with davfs2
 // LOCK support is not mandatory
 // WEBDAV_LOCK_SUPPORT
 // = 0: no support
 // = 1: fake support
-// > 1: supported with a std::map
+// > 1: supported with a std::map<>
 #define WEBDAV_LOCK_SUPPORT 2
 
+//#define DBG_WEBDAV 1
+
+#if !defined(DBG_WEBDAV) && defined(DEBUG_ESP_PORT)
 #define DBG_WEBDAV 1
+#define DBG_WEBDAV_PORT DEBUG_ESP_PORT
+#endif
 
 #if DBG_WEBDAV
 // debugging
-#define DBG_PRINT(...) 	    { Serial.print(__VA_ARGS__); }
-#define DBG_PRINTF(...)     { Serial.printf(__VA_ARGS__); }
-#define DBG_PRINTLN(...)    { Serial.println(__VA_ARGS__); }
+#ifndef DBG_WEBDAV_PORT
+#define DBG_WEBDAV_PORT Serial
+#endif
+#define DBG_PRINT(...) 	    { DBG_WEBDAV_PORT.print(__VA_ARGS__); }
+#define DBG_PRINTF(...)     { DBG_WEBDAV_PORT.printf(__VA_ARGS__); }
+#define DBG_PRINTLN(...)    { DBG_WEBDAV_PORT.println(__VA_ARGS__); }
 #else
 // production
 #define DBG_PRINT(...)      { }
