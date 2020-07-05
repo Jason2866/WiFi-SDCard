@@ -1,0 +1,21 @@
+#!/bin/bash
+echo "usage: [D=1] $0 run|valgrind|gdb|clean [options]"
+[ -z "$D" ] || D=1
+exdir=$(pwd)
+LIBS=${exdir}/../..:${ESP8266ARDUINO}/libraries/Hash
+cd ${ESP8266ARDUINO}/tests/host
+cmd="$1"
+
+[ "$cmd" = "" ] && exit 1
+
+if [ "$cmd" = clean ]; then
+    make clean
+else
+    [ "$cmd" = run ] && cmd=""
+    shift
+    set -ex
+    make ULIBDIRS=$LIBS FORCE32=0 ${D} V=0 ${exdir}/Simple
+    $cmd ./bin/Simple/Simple "$@"
+fi
+
+stty sane

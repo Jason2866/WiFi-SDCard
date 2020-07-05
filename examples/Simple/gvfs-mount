@@ -1,0 +1,16 @@
+
+# gnome mount with gvfs
+
+dav=dav://ESPWebDAV.local:9080/   # emulation
+#dav=dav://ESPWebDAV.local        # esp
+
+gio mount -u ${dav}
+gio mount ${dav}
+
+gio mount --list --detail
+
+sleep 3
+
+set -x
+ls -al /run/user/$(id -u)/gvfs/dav*
+

@@ -1,0 +1,3 @@
+pkill gvfsd
+pkill nautilus
+GVFS_HTTP_DEBUG=10 GVFS_DEBUG=1 $(find /usr/lib* -name gvfsd 2>/dev/null) --replace 2>&1 | tee /tmp/gvfsd.log

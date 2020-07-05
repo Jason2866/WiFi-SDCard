@@ -1,0 +1,20 @@
+#!/bin/bash
+
+set -ex
+
+# http://www.webdav.org/neon/litmus/
+
+v=litmus-0.13
+
+if [ ! -d ${v} ]; then
+    wget http://www.webdav.org/neon/litmus/${v}.tar.gz
+    tar xvfz ${v}.tar.gz
+    cd ${v}
+    ./configure
+    make
+    cd ..
+fi
+
+cd ${v}
+TESTROOT=. HTDOCS=./htdocs ./litmus -k http://ESPWebDav.local:9080/
+#make URL=http://ESPWebDav.local:9080/ check

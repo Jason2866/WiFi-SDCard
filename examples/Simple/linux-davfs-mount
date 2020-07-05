@@ -1,0 +1,8 @@
+url=http://ESPWebDAV.local:9080/
+#url=http://ESPWebDAV.local/
+
+sudo umount /mnt
+#sudo rm -rf /var/cache/davfs2/*
+sudo mount -t davfs -o uid=$(id -u) $url /mnt/
+ls -al /mnt/
+df -h /mnt/
