@@ -84,8 +84,8 @@ public:
 
     void begin(WiFiServer* srv, FS* fs);
     bool isClientWaiting();
-    void handleClient(const String& blank = "");
-    void rejectClient(const String& rejectMessage);
+    void handleClient();
+    //void rejectClient(const String& rejectMessage);
 
     static void stripSlashes (String& name);
 
@@ -107,7 +107,7 @@ protected:
 
     void processClient(THandlerFunction handler, const String& message);
     void handleIssue (int code, const char* text);
-    void handleReject(const String& rejectMessage);
+    //void handleReject(const String& rejectMessage);
     void handleRequest(const String& blank);
     void handleOptions(ResourceType resource);
     void handleLock(ResourceType resource);
@@ -140,10 +140,10 @@ protected:
     size_t readBytesWithTimeout(uint8_t *buf, size_t size);
     void processRange(const String& range);
 
-    bool allowed (const String& uri, uint32_t ownash);
-    bool allowed (const String& uri, const String& xml = emptyString);
+    int allowed (const String& uri, uint32_t ownash);
+    int allowed (const String& uri, const String& xml = emptyString);
     void makeToken (String& ret, uint32_t pash, uint32_t ownash);
-    void extractLockToken (const String& someHeader, const char* start, const char* end, uint32_t& pash, uint32_t& ownash);
+    int extractLockToken (const String& someHeader, const char* start, const char* end, uint32_t& pash, uint32_t& ownash);
     void getPayload (StreamString& payload);
     void stripName (String& name);
 
@@ -152,14 +152,19 @@ protected:
     size_t makeVirtual (virt_e v, String& internal);
 
     // variables pertaining to current most HTTP request being serviced
+    constexpr static int m_persistent_timer_init_ms = 5000;
+    long unsigned int m_persistent_timer_ms;
+    bool        m_persistent;
+    WiFiClient  client;
     WiFiServer* server;
     FS*         gfs;
     int         _maxPathLength;
 
-    WiFiClient 	client;
+    StreamString payload;
+
     String 		method;
     String 		uri;
-    String 		contentLengthHeader;
+    size_t 		contentLengthHeader;
     String 		depthHeader;
     String 		hostHeader;
     String		destinationHeader;
@@ -170,7 +175,7 @@ protected:
 
     String 		_responseHeaders;
     bool		_chunked;
-    int			_contentLength;
+    int			_contentLengthAnswer;
     int         _rangeStart;
     int         _rangeEnd;
 

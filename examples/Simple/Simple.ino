@@ -113,6 +113,7 @@ void help()
 void loop()
 {
     MDNS.update();
+    dav.handleClient();
 
     int c = Serial.read();
     if (c > 0)
@@ -142,14 +143,6 @@ void loop()
     }
 
     // ------------------------
-    if (dav.isClientWaiting())
-    {
-        if (initFailed)
-            return dav.rejectClient(statusMessage);
-
-        // call handle if server was initialized properly
-        dav.handleClient();
-    }
 }
 
 

@@ -108,57 +108,43 @@ String ESPWebDAV::urlToUri(const String& url)
     return url;
 }
 
-
-
 // ------------------------
-bool ESPWebDAV::isClientWaiting()
+void ESPWebDAV::handleClient()
 {
     // ------------------------
-    return server->hasClient();
+    processClient(&ESPWebDAV::handleRequest, emptyString);
 }
-
-
-
-
-// ------------------------
-void ESPWebDAV::handleClient(const String& blank)
-{
-    // ------------------------
-    processClient(&ESPWebDAV::handleRequest, blank);
-}
-
-
-
-// ------------------------
-void ESPWebDAV::rejectClient(const String& rejectMessage)
-{
-    // ------------------------
-    processClient(&ESPWebDAV::handleReject, rejectMessage);
-}
-
-
 
 // ------------------------
 void ESPWebDAV::processClient(THandlerFunction handler, const String& message)
 {
-    // ------------------------
-    // Check if a client has connected
-    client = server->available();
-    if (!client)
+    if (server->hasClient())
+    {
+        if (!client || !client.available())
+        {
+            // no or sleeping current client
+            // take it over
+            client = server->available();
+            m_persistent_timer_ms = millis();
+            DBG_PRINTF("NEW CLIENT-------------------------------------------------------\n");
+        }
+    }
+
+    if (!client || !client.available())
         return;
 
-    // Wait until the client sends some data
-    //XXXTIMEOUT !
-    while (!client.available())
-        delay(1);
+    // no new client is waiting, allow more time to current client
+    m_persistent_timer_ms = millis();
+
+    m_persistent = ((millis() - m_persistent_timer_ms) < m_persistent_timer_init_ms);
 
     // reset all variables
     _chunked = false;
-    _responseHeaders = String();
-    _contentLength = (size_t)CONTENT_LENGTH_NOT_SET;
+    _responseHeaders.clear();
+    _contentLengthAnswer = (size_t)CONTENT_LENGTH_NOT_SET;
     method.clear();
     uri.clear();
-    contentLengthHeader.clear();
+    contentLengthHeader = 0;
     depthHeader.clear();
     hostHeader.clear();
     destinationHeader.clear();
@@ -168,17 +154,18 @@ void ESPWebDAV::processClient(THandlerFunction handler, const String& message)
 
     // extract uri, headers etc
     if (parseRequest())
+    {
         // invoke the handler
         (this->*handler)(message);
+    }
 
     // finalize the response
     if (_chunked)
         sendContent("");
 
-    // send all data before closing connection
-    client.flush();
-    // close the connection
-    client.stop();
+    if (!m_persistent)
+        // close the connection
+        client.stop();
 }
 
 
@@ -255,7 +242,7 @@ bool ESPWebDAV::parseRequest()
         else if (headerName.equalsIgnoreCase("Depth"))
             depthHeader = headerValue;
         else if (headerName.equalsIgnoreCase("Content-Length"))
-            contentLengthHeader = headerValue;
+            contentLengthHeader = headerValue.toInt();
         else if (headerName.equalsIgnoreCase("Destination"))
             destinationHeader = headerValue;
         else if (headerName.equalsIgnoreCase("Range"))
@@ -326,17 +313,20 @@ void ESPWebDAV::_prepareHeader(String& response, const String& code, const char*
     if (content_type)
         sendHeader("Content-Type", content_type, true);
 
-    if ((size_t)_contentLength == CONTENT_LENGTH_NOT_SET)
+    if ((size_t)_contentLengthAnswer == CONTENT_LENGTH_NOT_SET)
         sendHeader("Content-Length", String(contentLength));
-    else if ((size_t)_contentLength != CONTENT_LENGTH_UNKNOWN)
-        sendHeader("Content-Length", String(_contentLength));
-    else if ((size_t)_contentLength == CONTENT_LENGTH_UNKNOWN)
+    else if ((size_t)_contentLengthAnswer != CONTENT_LENGTH_UNKNOWN)
+        sendHeader("Content-Length", String(_contentLengthAnswer));
+    else //if ((size_t)_contentLengthAnswer == CONTENT_LENGTH_UNKNOWN)
     {
         _chunked = true;
         //sendHeader("Accept-Ranges", "none");
         sendHeader("Transfer-Encoding", "chunked");
     }
-    sendHeader("Connection", "close");
+    if (m_persistent)
+        sendHeader("Connection", "keep-alive");
+    else
+        sendHeader("Connection", "close");
 
     response += _responseHeaders;
     response += "\r\n";
@@ -427,7 +417,7 @@ bool  ESPWebDAV::sendContent_P(PGM_P content)
 void ESPWebDAV::setContentLength(size_t len)
 {
     // ------------------------
-    _contentLength = len;
+    _contentLengthAnswer = len;
 }
 
 

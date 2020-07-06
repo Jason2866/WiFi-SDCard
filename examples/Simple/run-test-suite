@@ -16,5 +16,6 @@ if [ ! -d ${v} ]; then
 fi
 
 cd ${v}
-TESTROOT=. HTDOCS=./htdocs ./litmus -k http://ESPWebDav.local:9080/
-#make URL=http://ESPWebDav.local:9080/ check
+for t in basic copymove props locks http; do
+    ./${t} http://ESPWebDav.local:9080/ || true
+done
