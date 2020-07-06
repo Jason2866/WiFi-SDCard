@@ -29,7 +29,7 @@
 
 #include <ESP8266WiFi.h>
 #include <FS.h>
-#include <Hash.h>
+//#include <Hash.h> // sha1()
 #include <time.h>
 #include <coredecls.h> // crc32()
 
@@ -734,7 +734,7 @@ void ESPWebDAV::sendPropResponse(bool isDir, const String& fullResPath, size_t s
     sendContent(blah);
 
     sendProp1Response(F("getlastmodified"), fileTimeStamp.c_str());
-    sendProp1Response(F("getetag"), sha1(fullResPath + fileTimeStamp)); // XXX <= use crc32 like the others
+    //sendProp1Response(F("getetag"), sha1(fullResPath + fileTimeStamp)); // XXX <= use crc32 like the others
 
     DBG_PRINTF("-----\nentry: '%s'(dir:%d) date: '%s'\n-----\n",
         fullResPath.c_str(), isDir,

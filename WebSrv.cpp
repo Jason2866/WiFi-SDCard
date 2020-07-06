@@ -141,7 +141,7 @@ void ESPWebDAV::processClient(THandlerFunction handler, const String& message)
     // reset all variables
     _chunked = false;
     _responseHeaders.clear();
-    _contentLengthAnswer = (size_t)CONTENT_LENGTH_NOT_SET;
+    _contentLengthAnswer = (int)CONTENT_LENGTH_NOT_SET;
     method.clear();
     uri.clear();
     contentLengthHeader = 0;
