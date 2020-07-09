@@ -1,8 +1,15 @@
 
-# gnome mount with gvfs
+echo ""
+echo "WARNING - gio / gvfs WEBDAV mounts seem to not be fully functional (tested with apache)"
+echo ""
 
-dav=dav://ESPWebDAV.local:9080/   # emulation
-#dav=dav://ESPWebDAV.local        # esp
+[ -z "HOST" ] && HOST=ESPWebDAV.local
+[ -z "PORT" ] && PORT=80
+
+# gnome mount with gvfs
+set -x
+
+dav=dav://${HOST}:${PORT}/
 
 gio mount -u ${dav}
 gio mount ${dav}

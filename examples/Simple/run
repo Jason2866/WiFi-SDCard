@@ -3,7 +3,6 @@ log=/tmp/log
 
 mode=valgrind
 #mode=run
-
 size=10000 # 10000: FS=10MB
 
-rm -f $log; ./emu-run $mode -T -L $size -P /tmp 2>&1 | tee -i -p $log
+rm -f $log; ./emu-run $mode -T -L $size -P /tmp "$@" 2>&1 | tee -i -p $log

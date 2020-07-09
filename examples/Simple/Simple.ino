@@ -66,7 +66,6 @@ WiFiServer tcp(80);
 
 ESPWebDAV dav;
 
-
 String statusMessage;
 bool initFailed = false;
 

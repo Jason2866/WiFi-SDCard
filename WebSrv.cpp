@@ -133,6 +133,7 @@ void ESPWebDAV::processClient(THandlerFunction handler, const String& message)
     if (!client || !client.available())
         return;
 
+    DBG_PRINTF("INPUT\n");
     // no new client is waiting, allow more time to current client
     m_persistent_timer_ms = millis();
 
@@ -155,6 +156,7 @@ void ESPWebDAV::processClient(THandlerFunction handler, const String& message)
     // extract uri, headers etc
     if (parseRequest())
     {
+        //DBG_PRINTF("uri1=%s\n", uri.c_str());
         // invoke the handler
         (this->*handler)(message);
     }

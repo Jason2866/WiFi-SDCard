@@ -88,6 +88,7 @@ public:
     //void rejectClient(const String& rejectMessage);
 
     static void stripSlashes (String& name);
+    static String date2date (time_t date);
 
     bool dirAction (
         const String& path,
@@ -122,7 +123,7 @@ protected:
     void handleDelete(ResourceType resource);
     void handleCopy(ResourceType resource, File& file);
 
-    void sendPropResponse(bool isDir, const String& name, size_t size, time_t lastWrite);
+    void sendPropResponse(bool isDir, const String& name, size_t size, time_t lastWrite, time_t creationTime);
     void sendProp1Response(const String& what, const String& response);
 
     // Sections are copied from ESP8266Webserver

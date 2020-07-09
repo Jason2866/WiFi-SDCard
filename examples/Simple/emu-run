@@ -1,8 +1,8 @@
 #!/bin/bash
-echo "usage: [D=1] $0 run|valgrind|gdb|clean [options]"
-[ -z "$D" ] || D=1
+echo "usage: $0 run|valgrind|gdb|clean [options]"
 exdir=$(pwd)
-LIBS=${exdir}/../..:${ESP8266ARDUINO}/libraries/Hash
+#LIBS=${exdir}/../..:${ESP8266ARDUINO}/libraries/Hash
+LIBS=${exdir}/../..
 cd ${ESP8266ARDUINO}/tests/host
 cmd="$1"
 
@@ -14,7 +14,7 @@ else
     [ "$cmd" = run ] && cmd=""
     shift
     set -ex
-    make ULIBDIRS=$LIBS FORCE32=0 ${D} V=0 ${exdir}/Simple
+    make ULIBDIRS=$LIBS FORCE32=0 V=1 ${exdir}/Simple
     $cmd ./bin/Simple/Simple "$@"
 fi
 

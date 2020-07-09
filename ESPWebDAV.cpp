@@ -39,6 +39,8 @@
 const char *months[]  = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 const char *wdays[]  = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 
+#define ALLOW "PROPPATCH,PROPFIND,OPTIONS,DELETE" SCUNLOCK ",COPY" SCLOCK ",MOVE,HEAD,POST,PUT,GET"
+
 #if WEBDAV_LOCK_SUPPORT
 #define SLOCK "LOCK"
 #define SCLOCK ",LOCK"
@@ -191,10 +193,14 @@ void ESPWebDAV::dir (const String& path, Print* out)
             (void)parent;
             for (int i = 0; i < depth; i++)
                 out->print("    ");
-            out->printf("%s%s%s\n",
-                entry.isDirectory()?"[":"",
-                entry.fileName().c_str(),
-                entry.isDirectory()?"/]":"");
+            if (entry.isDirectory())
+                out->printf("[%s]\n", entry.fileName().c_str());
+            else
+                out->printf("%-40s%4dMiB %6dKiB %d\n",
+                    entry.fileName().c_str(),
+                    ((int)entry.fileSize() + (1 << 19)) >> 20,
+                    ((int)entry.fileSize() + (1 <<  9)) >> 10,
+                    (int)entry.fileSize());
             return true;
         }, /*false=subdir first*/false);
 }
@@ -320,8 +326,6 @@ void ESPWebDAV::handleIssue(int code, const char* text)
     err += ' ';
     err += text;
 
-    //sendHeader("Allow", "OPTIONS,MKCOL,POST,PUT");
-
     DBG_PRINTF("Issue:\ntext='%s'\n", text);
     DBG_PRINTF("message='%s'\n", message.c_str());
     DBG_PRINTF("err='%s'\n", err.c_str());
@@ -343,7 +347,6 @@ void ESPWebDAV::handleReject(const String& rejectMessage)
     // handle properties
     if (method.equals("PROPFIND"))
     {
-        sendHeader("Allow", "PROPFIND,OPTIONS,DELETE,COPY,MOVE");
         setContentLength(CONTENT_LENGTH_UNKNOWN);
         send("207 Multi-Status", "application/xml;charset=utf-8", "");
         sendContent(F("<?xml version=\"1.0\" encoding=\"utf-8\"?><D:multistatus xmlns:D=\"DAV:\"><D:response><D:href>/</D:href><D:propstat><D:status>HTTP/1.0 200 OK</D:status><D:prop><D:getlastmodified>Fri, 30 Nov 1979 00:00:00 GMT</D:getlastmodified><D:getetag>\"3333333333333333333333333333333333333333\"</D:getetag><D:resourcetype><D:collection/></D:resourcetype></D:prop></D:propstat></D:response>"));
@@ -371,8 +374,11 @@ void ESPWebDAV::handleRequest(const String& blank)
 {
     (void)blank;
 
+    //DBG_PRINTF("uri2=%s\n", uri.c_str());
     payload.clear();
+    //DBG_PRINTF("uri3=%s\n", uri.c_str());
     stripSlashes(uri);
+    //DBG_PRINTF("uri4=%s\n", uri.c_str());
 
     // ------------------------
     ResourceType resource = RESOURCE_NONE;
@@ -410,6 +416,7 @@ void ESPWebDAV::handleRequest(const String& blank)
     sendHeader("DAV", "1");
 #endif
     sendHeader("Accept-Ranges", "bytes");
+    sendHeader("Allow", ALLOW);
 
     // handle file create/uploads
     if (method.equals("PUT"))
@@ -474,7 +481,6 @@ void ESPWebDAV::handleOptions(ResourceType resource)
     // ------------------------
     DBG_PRINTLN("Processing OPTION");
 
-    sendHeader("Allow", "PROPFIND,GET,DELETE,PUT,COPY,MOVE");
     send("200 OK", NULL, "");
 }
 
@@ -490,8 +496,6 @@ void ESPWebDAV::handleLock(ResourceType resource)
     // does URI refer to an existing resource
     (void)resource;
     DBG_PRINTF("r=%d/%d\n", resource, RESOURCE_NONE);
-
-    sendHeader("Allow", "PROPPATCH,PROPFIND,OPTIONS,DELETE" SCUNLOCK ",COPY" SCLOCK ",MOVE,HEAD,POST,PUT,GET");
 
 #if WEBDAV_LOCK_SUPPORT > 1
     // lock owner
@@ -510,6 +514,15 @@ void ESPWebDAV::handleLock(ResourceType resource)
         ownash = startIdx > 0 && endIdx > 0? crc32(&payload[startIdx + 7], endIdx - startIdx - 7): 0;
     }
 
+    if (!ownash)
+    {
+        /* XXXFIXME xml extraction should be improved (on macOS)
+            0:10:08.058253: <D:owner>
+            0:10:08.058391: <D:href>http://www.apple.com/webdav_fs/</D:href>
+            0:10:08.058898: </D:owner>
+        */
+        ownash = 0xdeadbeef;
+    }
     DBG_PRINTF("asker: 0x%08x\n", ownash);
     stripSlashes(uri);
     uint32_t pash = crc32(uri.c_str(), uri.length());
@@ -614,7 +627,6 @@ void ESPWebDAV::handleUnlock(ResourceType resource)
     (void)resource;
     // ------------------------
     DBG_PRINTLN("Processing UNLOCK");
-    sendHeader("Allow", "PROPPATCH,PROPFIND,OPTIONS,DELETE,UNLOCK,COPY,LOCK,MOVE,HEAD,POST,PUT,GET");
     send("204 No Content", NULL, "");
 }
 
@@ -639,20 +651,13 @@ void ESPWebDAV::handleProp(ResourceType resource, File& file)
 
     if (v)
         resource = RESOURCE_FILE;
-
     // does URI refer to an existing resource
-    else
-        if (resource == RESOURCE_NONE)
-            return handleIssue(404, "Not found");
+    else if (resource == RESOURCE_NONE)
+        return handleIssue(404, "Not found");
 
     int code;
     if (payload.indexOf("lockdiscovery") < 0 && (code = allowed(uri)) != 200)
         return handleIssue(code, "Locked");
-
-    if (resource == RESOURCE_FILE)
-        sendHeader("Allow", "PROPFIND,OPTIONS,DELETE,COPY,MOVE,HEAD,POST,PUT,GET");
-    else
-        sendHeader("Allow", "PROPFIND,OPTIONS,DELETE,COPY,MOVE");
 
     setContentLength(CONTENT_LENGTH_UNKNOWN);
     send("207 Multi-Status", "application/xml;charset=utf-8", "");
@@ -662,12 +667,12 @@ void ESPWebDAV::handleProp(ResourceType resource, File& file)
     if (v)
     {
         // virtual file
-        sendPropResponse(false, uri.c_str(), 1024, time(nullptr));
+        sendPropResponse(false, uri.c_str(), 1024, time(nullptr), 0);
     }
     else if (file.isFile() || depth == DEPTH_NONE)
     {
         DBG_PRINTF("----- PROP FILE '%s':\n", uri.c_str());
-        sendPropResponse(file.isDirectory(), uri.c_str(), file.size(), file.getLastWrite());
+        sendPropResponse(file.isDirectory(), uri.c_str(), file.size(), file.getLastWrite(), file.getCreationTime());
     }
     else
     {
@@ -677,7 +682,7 @@ void ESPWebDAV::handleProp(ResourceType resource, File& file)
         if (uri.length() == 0 || (uri.length() == 1 && uri[0] == '/'))
         {
             ///XXX fixme: more generic way to list virtual file list
-            sendPropResponse(false, PROC, 1024, time(nullptr));
+            sendPropResponse(false, PROC, 1024, time(nullptr), 0);
         }
 
         Dir entry = gfs->openDir(uri);
@@ -691,7 +696,7 @@ void ESPWebDAV::handleProp(ResourceType resource, File& file)
             path += '/';
             path += name;
             stripSlashes(path);
-            sendPropResponse(entry.isDirectory(), path.c_str(), entry.fileSize(), entry.fileTime());
+            sendPropResponse(entry.isDirectory(), path.c_str(), entry.fileSize(), entry.fileTime(), entry.fileCreationTime());
         }
     }
 
@@ -703,63 +708,70 @@ void ESPWebDAV::sendProp1Response(const String& what, const String& response)
 {
     String one;
     one.reserve(100 + 2*what.length() + response.length());
-    one += F("<D:propstat><D:status>HTTP/1.1 200 OK</D:status><D:prop><D:");
+    one += F("<esp:");
     one += what;
     one += F(">");
     one += response;
-    one += F("</D:");
+    one += F("</esp:");
     one += what;
-    one += F("></D:prop></D:propstat>");
+    one += F(">");
     sendContent(one);
 }
 
-// ------------------------
-void ESPWebDAV::sendPropResponse(bool isDir, const String& fullResPath, size_t size, time_t lastWrite)
+String ESPWebDAV::date2date (time_t date)
 {
     // get & convert time to required format
     // Tue, 13 Oct 2015 17:07:35 GMT
-    tm* gTm = gmtime(&lastWrite);
-    String fileTimeStamp;
-    {
-        char buf[30];
-        snprintf(buf, sizeof(buf), "%s, %02d %s %04d %02d:%02d:%02d GMT", wdays[gTm->tm_wday], gTm->tm_mday, months[gTm->tm_mon], gTm->tm_year + 1900, gTm->tm_hour, gTm->tm_min, gTm->tm_sec);
-        fileTimeStamp += buf;
-    }
+    tm* gTm = gmtime(&date);
+    char buf[30];
+    snprintf(buf, sizeof(buf), "%s, %02d %s %04d %02d:%02d:%02d GMT", wdays[gTm->tm_wday], gTm->tm_mday, months[gTm->tm_mon], gTm->tm_year + 1900, gTm->tm_hour, gTm->tm_min, gTm->tm_sec);
+    return buf;
+}
 
+// ------------------------
+void ESPWebDAV::sendPropResponse(bool isDir, const String& fullResPath, size_t size, time_t lastWrite, time_t creationDate)
+{
     String blah;
     blah.reserve(100);
-    blah += F("<D:response><D:href>");
+    blah += F("<D:response xmlns:esp=\"DAV:\"><D:href>");
     blah += fullResPath;
-    blah += F("</D:href>");
+    blah += F("</D:href><D:propstat><D:status>HTTP/1.1 200 OK</D:status><D:prop>");
     sendContent(blah);
 
-    sendProp1Response(F("getlastmodified"), fileTimeStamp.c_str());
-    //sendProp1Response(F("getetag"), sha1(fullResPath + fileTimeStamp)); // XXX <= use crc32 like the others
+    sendProp1Response(F("getlastmodified"), date2date(lastWrite));
+    sendProp1Response(F("creationdate"), date2date(creationDate));
 
-    DBG_PRINTF("-----\nentry: '%s'(dir:%d) date: '%s'\n-----\n",
-        fullResPath.c_str(), isDir,
-        fileTimeStamp.c_str());
+    DBG_PRINTF("-----\nentry: '%s'(dir:%d)\n-----\n",
+        fullResPath.c_str(), isDir);
 
     if (isDir)
     {
-        sendProp1Response(F("resourcetype"), F("<D:collection/>"));
-
         fs::FSInfo64 info;
         if (gfs->info64(info))
         {
-            sendProp1Response("quota-available-bytes", String(1.0 * info.totalBytes, 0));
+            sendProp1Response("quota-available-bytes", String(1.0 * (info.totalBytes - info.usedBytes), 0));
             sendProp1Response("quota-used-bytes", String(1.0 * info.usedBytes, 0));
         }
+
+        sendProp1Response(F("resourcetype"), F("<D:collection/>"));
     }
     else
     {
         sendProp1Response(F("getcontentlength"), String(size));
         sendProp1Response(F("getcontenttype"), getMimeType(fullResPath));
+
+        sendContent("<resourcetype/>");
+
+        char entityTag [uri.length() + 32];
+        sprintf(entityTag, "%s%lu", uri.c_str(), (unsigned long)lastWrite);
+        uint32_t crc = crc32(entityTag, strlen(entityTag));
+        sprintf(entityTag, "\"%08x\"", crc);
+        sendProp1Response(F("getetag"), entityTag);
     }
 
-    //sendProp1Response(F("displayname"), "yeah");
+    sendProp1Response(F("displayname"), fullResPath);
 
-    sendContent(F("</D:response>"));
+    sendContent(F("</D:prop></D:propstat></D:response>"));
 }
 
 
@@ -780,7 +792,6 @@ void ESPWebDAV::handleGet(ResourceType resource, File& file, bool isGet)
     long tStart = millis();
 #endif
 
-    sendHeader("Allow", "PROPFIND,OPTIONS,DELETE,COPY,MOVE,HEAD,POST,PUT,GET");
     size_t fileSize = file.size();
     String contentType = getMimeType(uri);
     if (uri.endsWith(".gz") && contentType != "application/x-gzip" && contentType != "application/octet-stream")
@@ -835,7 +846,6 @@ void ESPWebDAV::handleGet(ResourceType resource, File& file, bool isGet)
 
         if (internal.length())
         {
-            printf("GLO %s %d %d\n", internal.c_str(), (int)_rangeStart, (int)remaining);
             if (   ( chunked && !sendContent(&internal.c_str()[_rangeStart], remaining))
                 || (!chunked && client.write(&internal.c_str()[_rangeStart], remaining) != (size_t)remaining))
             {
@@ -887,8 +897,6 @@ void ESPWebDAV::handlePut(ResourceType resource)
     int code ;
     if ((code = allowed(uri)) != 200)
         return handleIssue(code, "Lock error");
-
-    sendHeader("Allow", "PROPFIND,OPTIONS,DELETE,COPY,MOVE,HEAD,POST,PUT,GET");
 
     File file;
     stripName(uri);
@@ -995,7 +1003,6 @@ void ESPWebDAV::handleDirectoryCreate(ResourceType resource)
     }
 
     DBG_PRINT(uri);	DBG_PRINTLN(" directory created");
-    sendHeader("Allow", "OPTIONS,MKCOL" SCLOCK ",POST,PUT");
     send("201 Created", NULL, "");
 }
 
@@ -1066,7 +1073,6 @@ void ESPWebDAV::handleMove(ResourceType resource, File& src)
     }
 
     DBG_PRINTLN("Move successful");
-    sendHeader("Allow", "OPTIONS,MKCOL" SCLOCK ",POST,PUT");
     send(successCode, NULL, "");
 }
 
@@ -1130,7 +1136,6 @@ void ESPWebDAV::handleDelete(ResourceType resource)
     }
 
     DBG_PRINTLN("Delete successful");
-    sendHeader("Allow", "OPTIONS,MKCOL" SCLOCK ",POST,PUT");
     send("200 OK", NULL, "");
 }
 
@@ -1270,7 +1275,6 @@ void ESPWebDAV::handleCopy(ResourceType resource, File& src)
     }
 
     DBG_PRINTLN("COPY successful\n");
-    sendHeader("Allow", "OPTIONS,MKCOL" SCLOCK ",POST,PUT");
     send(successCode, NULL, "");
 }
 

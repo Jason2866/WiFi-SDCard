@@ -1,8 +1,20 @@
-url=http://ESPWebDAV.local:9080/
-#url=http://ESPWebDAV.local/
 
-sudo umount /mnt
-#sudo rm -rf /var/cache/davfs2/*
-sudo mount -t davfs -o uid=$(id -u) $url /mnt/
-ls -al /mnt/
-df -h /mnt/
+[ -z "HOST" ] && HOST=ESPWebDAV.local
+[ -z "PORT" ] && PORT=80
+
+url=http://${HOST}:${PORT}/
+
+echo URL=${url}
+
+sudo umount /mnt && sleep 4
+sudo pkill -9 mount.davfs
+sudo rm -rf /var/cache/davfs2/*  /var/run/mount.davfs/*pid
+sudo ls -al /var/cache/davfs2/
+if sudo mount -t davfs -o uid=$(id -u) $url /mnt/; then
+    echo OK
+    sleep 2
+    ls -al /mnt/
+    df -h /mnt/
+else
+    echo BAD
+fi
