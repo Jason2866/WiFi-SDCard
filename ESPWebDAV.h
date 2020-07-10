@@ -43,6 +43,10 @@
 
 #define DBG_WEBDAV 1
 
+#if CORE_MOCK
+#define DBG_WEBDAV 1
+#endif
+
 #if !defined(DBG_WEBDAV) && defined(DEBUG_ESP_PORT)
 #define DBG_WEBDAV 1
 #define DBG_WEBDAV_PORT DEBUG_ESP_PORT
