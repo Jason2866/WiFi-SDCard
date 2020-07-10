@@ -110,9 +110,9 @@ int ESPWebDAV::extractLockToken (const String& someHeader, const char* start, co
     cp[len] = 0;
     DBG_PRINTF("IfToken: '%s'\n", cp);
     int ownIdx = std::max(len - 8, 0);
-    ownash = strtol(&cp[ownIdx], nullptr, 16);
+    ownash = strtoul(&cp[ownIdx], nullptr, 16);
     cp[ownIdx] = 0;
-    pash = strtol(cp, nullptr, 16);
+    pash = strtoul(cp, nullptr, 16);
     DBG_PRINTF("IfToken: path:0x%08x / owner:0x%08x\n", pash, ownash);
     return 200;
 }
