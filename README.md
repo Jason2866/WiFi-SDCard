@@ -30,17 +30,19 @@ Also added / fixed:
   to reflect some live state without writing any file<br/>
   (best would be to have a virtual FS)
 
+### Testing
+
+- an interactive example is provided
+- A [test script](https://github.com/d-a-v/ESPWebDAV/blob/v2/tests/run) for
+  emulation on host si provided
+- litmus test suite: download/build/run from `tests/` directory<br/>
+  for both [esp](tests/run-test-suite) or [emulation](tests/run-test-suite-emu)
+
+### Connect from clients
+
+[Documentation is in the example](https://github.com/d-a-v/ESPWebDAV/blob/v2/examples/Simple/Simple.ino#L30-L50).
+
 ### TODO
 
 - implement credentials
 - test MFLN with TLS
-
-### testing
-
-- server: check the `tests/` directory for emulation on host
-- litmus: download/build/run also from `tests/` directory<br/>
-  for both esp or emulation
-
-### Connect from clients
-
-[doc in example](https://github.com/d-a-v/ESPWebDAV/blob/v2/examples/Simple/Simple.ino#L30-L50)
