@@ -145,7 +145,7 @@ protected:
     int allowed (const String& uri, const String& xml = emptyString);
     void makeToken (String& ret, uint32_t pash, uint32_t ownash);
     int extractLockToken (const String& someHeader, const char* start, const char* end, uint32_t& pash, uint32_t& ownash);
-    void getPayload (StreamString& payload);
+    bool getPayload (StreamString& payload);
     void stripName (String& name);
 
     enum virt_e { VIRT_NONE, VIRT_PROC };

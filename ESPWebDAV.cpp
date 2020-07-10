@@ -29,9 +29,9 @@
 
 #include <ESP8266WiFi.h>
 #include <FS.h>
-//#include <Hash.h> // sha1()
 #include <time.h>
 #include <coredecls.h> // crc32()
+#include <PolledTimeout.h>
 
 #include <ESPWebDAV.h>
 
@@ -225,24 +225,35 @@ ESPWebDAV::virt_e ESPWebDAV::isVirtual (const String& uri)
     return VIRT_NONE;
 }
 
-void ESPWebDAV::getPayload (StreamString& payload)
+bool ESPWebDAV::getPayload (StreamString& payload)
 {
     DBG_PRINTF("content length=%d\n", (int)contentLengthHeader);
     payload.clear();
     if (contentLengthHeader > 0)
     {
         payload.reserve(contentLengthHeader);
-        while (payload.length() < (size_t)contentLengthHeader && client.available())
+        esp8266::polledTimeout::oneShotFastMs timeout(HTTP_MAX_POST_WAIT);
+        while (payload.length() < (size_t)contentLengthHeader)
         {
             uint8_t buf[16];
             auto n = client.read(buf, std::min((size_t)client.available(), sizeof(buf)));
+            if (n <= 0 && timeout)
+            {
+                DBG_PRINTF("get content: short read (%d < %d)\n",
+                    (int)payload.length(), (int)contentLengthHeader);
+                return false;
+            }
             if (n > 0)
+            {
                 payload.write(buf, n);
+                timeout.reset();
+            }
         }
         DBG_PRINTF(">>>>>>>>>>> CONTENT:\n");
         DBG_PRINT(payload);
         DBG_PRINTF("\n<<<<<<<<<<< CONTENT\n");
     }
+    return true;
 }
 
 bool ESPWebDAV::dirAction (const String& path,
@@ -424,7 +435,12 @@ void ESPWebDAV::handleRequest(const String& blank)
         return handlePut(resource);
 
     // swallow content
-    getPayload(payload);
+    if (!getPayload(payload))
+    {
+        handleIssue(408, "Request Time-out");
+        client.stop();
+        return;
+    }
 
     // handle properties
     if (method.equals("PROPFIND"))
