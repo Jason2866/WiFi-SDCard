@@ -23,12 +23,12 @@ Also added / fixed:
 - http/1.1 (reusing connections)
 - locks, directories
 - tested against [litmus test suite](http://www.webdav.org/neon/litmus)
-- xml is still not yet properly used
-(although https://github.com/leethomason/tinyxml2.git works on esp8266)
-(but that's OK, clients are permissive enough)
-- Initial proof of concept with virtual /proc file
-to reflect some live state without writing any file
-(best would be to have a virtual FS)
+- xml is still not yet properly used<br/>
+  (although https://github.com/leethomason/tinyxml2.git works on esp8266)<br/>
+  (but that's OK, clients are permissive enough)
+- Initial proof of concept with virtual /proc file<br/>
+  to reflect some live state without writing any file<br/>
+  (best would be to have a virtual FS)
 
 ### TODO
 
@@ -38,5 +38,9 @@ to reflect some live state without writing any file
 ### testing
 
 - server: check the `tests/` directory for emulation on host
-- litmus: download/build/run also from `tests/` directory
-for both esp or emulation
+- litmus: download/build/run also from `tests/` directory<br/>
+  for both esp or emulation
+
+### Connect from clients
+
+[doc in example](https://github.com/d-a-v/ESPWebDAV/blob/v2/examples/Simple/Simple.ino#L30-L50)

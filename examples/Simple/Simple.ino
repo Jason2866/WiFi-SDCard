@@ -29,20 +29,24 @@
 
 /*  Using the WebDAV server
 
-	From windows file explorer,
-		Run: \\ESPWebDAV.local\
-		or http://ESPWebDAV.local/
-		or Map Network Drive -> Connect to a Website
-    From macOS: Finder > command-K > http://ESPWebDAV.local/
-		(do not select anonymous to have write access)
-	From linux:
-		use mount -t davs2 http://ESPWebDAV.local/ /mnt/
-		use gio/gvfs/nautilus/YourFileExplorer http://ESPWebDAV.local/
+    From windows file explorer,
+        \\ESPWebDAV.local\
+        or http://ESPWebDAV.local/
+        or Map Network Drive -> Connect to http://ESPWebDAV.local/
+           subst w: \\ESPWebDAV.local/DavWWWRoot
+    From macOS Finder > command-K > http://ESPWebDAV.local/
+        (do not select anonymous to have write access)
+    From macOS cmdline:
+        mkdir -p /tmp/esp; mount_webdav -S -i -v esp8266 http://ESPWebDAV.local/ /tmp/esp && echo OK
+    From linux:
+        use mount -t davs2 http://ESPWebDAV.local/ /mnt/
+        use gio/gvfs/nautilus/YourFileExplorer http://ESPWebDAV.local/
 
-	When running emulation on host (script ./run), use one of these URLs instead:
-		http://ESPWebDAV.local:9080/
-		http://127.0.0.1:9080/
-		http://local-ip-address:9080/
+    When running emulation on host (script ./run), use one of these URLs instead:
+        http://ESPWebDAV.local:9080/
+        http://127.0.0.1:9080/
+        http://local-ip-address:9080/
+        subst w: \\ESPWebDAV.local@9080/DavWWWRoot
 */
 
 #include <ESP8266WiFi.h>
@@ -50,7 +54,7 @@
 #include <LittleFS.h>
 #include <ESPWebDAV.h>
 
-#define HOSTNAME	"ESPWebDAV"
+#define HOSTNAME    "ESPWebDAV"
 
 #ifndef STASSID
 #define STASSID "ssid"
