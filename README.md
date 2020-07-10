@@ -33,14 +33,13 @@ Also added / fixed:
 ### Testing
 
 - an interactive example is provided
-- A [test script](https://github.com/d-a-v/ESPWebDAV/blob/v2/tests/run) for
-  emulation on host si provided
+- A [test script](tests/run) for emulation on host si provided
 - litmus test suite: download/build/run from `tests/` directory<br/>
-  for both [esp](tests/run-test-suite) or [emulation](tests/run-test-suite-emu)
+  for both [esp](tests/run-test-suite) and [emulation](tests/run-test-suite-emu)
 
 ### Connect from clients
 
-[Documentation is in the example](https://github.com/d-a-v/ESPWebDAV/blob/v2/examples/Simple/Simple.ino#L30-L50).
+[Documentation is in the example](examples/Simple/Simple.ino#L30-L50).
 
 ### TODO
 
