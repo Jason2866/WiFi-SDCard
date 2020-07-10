@@ -739,7 +739,7 @@ String ESPWebDAV::date2date (time_t date)
     // get & convert time to required format
     // Tue, 13 Oct 2015 17:07:35 GMT
     tm* gTm = gmtime(&date);
-    char buf[30];
+    char buf[40];
     snprintf(buf, sizeof(buf), "%s, %02d %s %04d %02d:%02d:%02d GMT", wdays[gTm->tm_wday], gTm->tm_mday, months[gTm->tm_mon], gTm->tm_year + 1900, gTm->tm_hour, gTm->tm_min, gTm->tm_sec);
     return buf;
 }
