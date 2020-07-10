@@ -1,6 +1,7 @@
+#!/bin/sh
 
-[ -z "HOST" ] && HOST=ESPWebDAV.local
-[ -z "PORT" ] && PORT=80
+[ -z "$HOST" ] && HOST=ESPWebDAV.local
+[ -z "$PORT" ] && PORT=80
 
 url=http://${HOST}:${PORT}/
 

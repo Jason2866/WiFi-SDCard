@@ -1,48 +1,43 @@
-# WebDAV Server and a 3D Printer
-This project is a WiFi WebDAV server using ESP8266 SoC. It maintains the filesystem on an SD card.
+# WebDAV server library
 
-Supports the basic WebDav operations - *PROPFIND*, *GET*, *PUT*, *DELETE*, *MKCOL*, *MOVE* etc.
-
-Once the WebDAV server is running on the ESP8266, a WebDAV client like Windows can access the filesystem on the SD card just like a cloud drive. The drive can also be mounted like a networked drive, and allows copying/pasting/deleting files on SD card remotely.
+This is a continuation of @ardyesp's [initial work](https://github.com/ardyesp/ESPWebDAV).
 
 ### 3D Printer
 
-I am using this setup as a networked drive for 3D Printer running Marlin. Following circuit with ESP8266 and a MicroSD adapter is fabricated on a PCB. A full size SD card adapter is glued to one end and provides access to all SPI data lines from printer. ESP8266 code avoids accessing micro SD card, when Marlin (printer's firmware) is reading/writing to it (detected using Chip Select line).
+This repository focuses on WebDAV protocol.
+3D printer informations and examples can be found inside the initial repository.
 
-GCode can be directly uploaded from the slicer (Cura) to this remote drive, thereby simplifying the workflow. 
+### WebDAV protocol
 
+Protocol support has been extended thanks to the esp8266 Arduno emulation
+environment which allowed to make the porting easier.
 
-![Printer Hookup Diagram](PrinterHookup2.jpg)
+Current version has been tested with 
+- linux: davfs2
+- linux: gvfs/gio (but this one also has issues with an apache webdav server)
+- macOS Finder
+- windows explorer
 
-## Dependencies:
-1. [ESP8266 Arduino Core version 2.4](https://github.com/esp8266/Arduino)
-2. [SdFat library](https://github.com/greiman/SdFat)
-  
+Also added:
+Protocol implementation:
+- http/1.1 (reusing connections)
+- locks, directories
+- tested against [litmus test suite](http://www.webdav.org/neon/litmus)
+- xml is still not yet properly used
+  (although https://github.com/leethomason/tinyxml2.git works on esp8266)
+  (but that's OK, clients are permissive enough)
+- Initial proof of concept with virtual /proc file
+  to reflect some live state without writing any file
+  (best would be to have a virtual FS)
 
-## Use:
-Compile and upload the program to an ESP8266 module. ESP12-E was used for development and testing.
-Connect the SPI bus lines to SD card.
+### TODO
 
-ESP Module|SD Card
----|---
-GPIO13|MOSI   
-GPIO12|MISO   
-GPIO14|SCK    
-GPIO4|CS   
-GPIO5|CS Sense   
+- implement credentials
+- test MFLN with TLS
+- linux: mplayer does not work on gvfs (but cp does work)
 
-The card should be formatted for Fat16 or Fat32
+### testing
 
-To access the drive from Windows, type ```\\esp_hostname_or_ip\DavWWWRoot``` at the Run prompt, or use Map Network Drive menu in Windows Explorer.
-
-## References
-Marlin Firmware - [http://marlinfw.org/](http://marlinfw.org/)   
-
-Cura Slicer - [https://ultimaker.com/en/products/ultimaker-cura-software](https://ultimaker.com/en/products/ultimaker-cura-software)   
-
-3D Printer LCD and SD Card Interface - [http://reprap.org/wiki/RepRapDiscount_Full_Graphic_Smart_Controller](http://reprap.org/wiki/RepRapDiscount_Full_Graphic_Smart_Controller)   
-
-LCD Schematics - [http://reprap.org/mediawiki/images/7/79/LCD_connect_SCHDOC.pdf](http://reprap.org/mediawiki/images/7/79/LCD_connect_SCHDOC.pdf)   
-
-
-
+- server: check the `tests/` directory for emulation on host
+- litmus: download/build/run also from `tests/` directory
+  for both esp or emulation

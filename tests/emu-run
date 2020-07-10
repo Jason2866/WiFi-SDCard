@@ -1,7 +1,6 @@
 #!/bin/bash
 echo "usage: $0 run|valgrind|gdb|clean [options]"
-exdir=$(pwd)
-#LIBS=${exdir}/../..:${ESP8266ARDUINO}/libraries/Hash
+exdir=$(pwd)/../examples/Simple
 LIBS=${exdir}/../..
 cd ${ESP8266ARDUINO}/tests/host
 cmd="$1"

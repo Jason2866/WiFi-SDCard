@@ -1,0 +1,26 @@
+#!/bin/bash
+
+litmus=http://www.webdav.org/neon/litmus
+v=litmus-0.13
+
+set -ex
+
+[ -z "$HOST" ] && HOST=ESPWebDAV.local
+[ -z "$PORT" ] && PORT=80
+url=http://${HOST}:${PORT}/
+
+echo "using '$url'"
+
+if [ ! -d ${v} ]; then
+    wget ${litmus}/${v}.tar.gz
+    tar xvfz ${v}.tar.gz
+    cd ${v}
+    ./configure
+    make
+    cd ..
+fi
+
+cd ${v}
+for t in basic copymove props locks http; do
+    ./${t} ${url} || true
+done

@@ -1,0 +1,12 @@
+
+size=10000 # 10000: FS=10MB
+
+cmd="run -T -L $size -P /tmp"
+
+echo "---------------------------------"
+echo "(gdb) $cmd"
+echo "---------------------------------"
+
+xdotool "$cmd"
+
+./emu-run gdb
