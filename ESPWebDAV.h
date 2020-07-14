@@ -41,7 +41,7 @@
 // > 1: supported with a std::map<>
 #define WEBDAV_LOCK_SUPPORT 2
 
-#define DBG_WEBDAV 1
+//#define DBG_WEBDAV 1
 
 #if CORE_MOCK
 #define DBG_WEBDAV 1
@@ -79,17 +79,26 @@
 #include <ESP8266WiFi.h>
 #include <StreamString.h>
 
-class ESPWebDAV
+class ESPWebDAVCore
 {
 public:
 
     enum ResourceType { RESOURCE_NONE, RESOURCE_FILE, RESOURCE_DIR };
     enum DepthType { DEPTH_NONE, DEPTH_CHILD, DEPTH_ALL };
+    
 
-    void begin(WiFiServer* srv, FS* fs);
-    bool isClientWaiting();
-    void handleClient();
-    //void rejectClient(const String& rejectMessage);
+    using ContentType_f = std::function<String(const String&)>;
+
+    void begin(FS* gfs)
+    {
+        this->gfs = gfs;
+
+        fs::FSInfo64 info;
+        if (gfs->info64(info))
+            _maxPathLength = info.maxPathLength;
+        else
+            _maxPathLength = 16;
+    }
 
     static void stripSlashes (String& name);
     static String date2date (time_t date);
@@ -103,9 +112,14 @@ public:
 
     void dir (const String& path, Print* out);
 
+    void parseRequest(const String& method, const String& uri, WiFiClient* client, ContentType_f contentType);
+
 protected:
 
-    typedef void (ESPWebDAV::*THandlerFunction)(const String&);
+    //XXXFIXME this function must be replaced by some Stream::to()
+    size_t readBytesWithTimeout(uint8_t *buf, size_t size);
+
+    typedef void (ESPWebDAVCore::*THandlerFunction)(const String&);
 
     bool copyFile (File file, const String& destName);
     bool deleteDir (const String& dir);
@@ -113,7 +127,7 @@ protected:
     void processClient(THandlerFunction handler, const String& message);
     void handleIssue (int code, const char* text);
     //void handleReject(const String& rejectMessage);
-    void handleRequest(const String& blank);
+    void handleRequest();
     void handleOptions(ResourceType resource);
     void handleLock(ResourceType resource);
     void handleUnlock(ResourceType resource);
@@ -130,11 +144,6 @@ protected:
     void sendPropResponse(bool isDir, const String& name, size_t size, time_t lastWrite, time_t creationTime);
     void sendProp1Response(const String& what, const String& response);
 
-    // Sections are copied from ESP8266Webserver
-    String getMimeType(const String& path);
-    String urlDecode(const String& text);
-    String urlToUri(const String& url);
-    bool parseRequest();
     void sendHeader(const String& name, const String& value, bool first = false);
     void send(const String& code, const char* content_type, const String& content);
     void _prepareHeader(String& response, const String& code, const char* content_type, size_t contentLength);
@@ -142,7 +151,6 @@ protected:
     bool sendContent_P(PGM_P content);
     bool sendContent(const char* data, size_t size);
     void setContentLength(size_t len);
-    size_t readBytesWithTimeout(uint8_t *buf, size_t size);
     void processRange(const String& range);
 
     int allowed (const String& uri, uint32_t ownash);
@@ -151,6 +159,7 @@ protected:
     int extractLockToken (const String& someHeader, const char* start, const char* end, uint32_t& pash, uint32_t& ownash);
     bool getPayload (StreamString& payload);
     void stripName (String& name);
+    String urlToUri(const String& url);
 
     enum virt_e { VIRT_NONE, VIRT_PROC };
     virt_e isVirtual (const String& uri);
@@ -160,15 +169,14 @@ protected:
     constexpr static int m_persistent_timer_init_ms = 5000;
     long unsigned int m_persistent_timer_ms;
     bool        m_persistent;
-    WiFiClient  client;
-    WiFiServer* server;
     FS*         gfs;
     int         _maxPathLength;
 
+    String      method;
+    String      uri;
     StreamString payload;
+    WiFiClient* client;
 
-    String 		method;
-    String 		uri;
     size_t 		contentLengthHeader;
     String 		depthHeader;
     String 		hostHeader;
@@ -189,6 +197,33 @@ protected:
     // map<crc32(path),crc32(owner)>
     std::map<uint32_t, uint32_t> _locks;
 #endif
+
+    ContentType_f contentTypeFn = nullptr;
+};
+
+class ESPWebDAV: public ESPWebDAVCore
+{
+public:
+
+    void begin(WiFiServer* srv, FS* fs)
+    {
+        ESPWebDAVCore::begin(fs);
+        this->server = srv;
+    }
+
+    bool isClientWaiting();
+    void handleClient();
+
+protected:
+
+    // Sections are copied from ESP8266Webserver
+    static String getMimeType(const String& path);
+    String urlDecode(const String& text);
+
+    void parseRequest();
+
+    WiFiServer* server;
+    WiFiClient  locClient;
 };
 
 #endif // __ESPWEBDAV_H

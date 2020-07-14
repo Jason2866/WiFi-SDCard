@@ -3,7 +3,7 @@
 [ -z "$HOST" ] && HOST=ESPWebDAV.local
 [ -z "$PORT" ] && PORT=80
 
-url=http://${HOST}:${PORT}/
+url=http://${HOST}:${PORT}/${ROOT}
 
 echo URL=${url}
 

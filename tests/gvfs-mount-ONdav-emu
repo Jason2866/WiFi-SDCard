@@ -1,0 +1,2 @@
+
+PORT=9080 HOST=127.0.0.1 ROOT=dav/ ./gvfs-mount

@@ -9,7 +9,7 @@ echo ""
 # gnome mount with gvfs
 set -x
 
-dav=dav://${HOST}:${PORT}/
+dav=dav://${HOST}:${PORT}/${ROOT}
 
 gio mount -u ${dav}
 gio mount ${dav}

@@ -50,9 +50,10 @@
 */
 
 #include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
 #include <LittleFS.h>
-#include <ESPWebDAV.h>
+#include <WebDav4WebServer.h>
 
 #define HOSTNAME    "ESPWebDAV"
 
@@ -65,10 +66,9 @@
 FS& gfs = LittleFS;
 //FS& gfs = SDFS;
 
-//WiFiServerSecure tcp(443);
-WiFiServer tcp(80);
+ESP8266WebServer server(80);
 
-ESPWebDAV dav;
+ESPWebDAVCore dav;
 
 // ------------------------
 void setup()
@@ -97,9 +97,11 @@ void setup()
     MDNS.begin(HOSTNAME);
 
     gfs.begin();
-    tcp.begin();
-    dav.begin(&tcp, &gfs);
-
+    gfs.mkdir("/dav");
+    dav.begin(&gfs);
+    server.addHook(hookWebDAVForWebserver("/dav", dav));
+    server.begin();
+    Serial.println("HTTP server started");
     Serial.println("WebDAV server started");
 }
 
@@ -119,7 +121,7 @@ void help()
 void loop()
 {
     MDNS.update();
-    dav.handleClient();
+    server.handleClient();
 
     int c = Serial.read();
     if (c > 0)
