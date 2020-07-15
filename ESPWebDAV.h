@@ -112,7 +112,7 @@ public:
 
     void dir (const String& path, Print* out);
 
-    void parseRequest(const String& method, const String& uri, WiFiClient* client, ContentType_f contentType);
+    bool parseRequest(const String& method, const String& uri, WiFiClient* client, ContentType_f contentType);
 
 protected:
 

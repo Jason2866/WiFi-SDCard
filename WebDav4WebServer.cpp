@@ -7,8 +7,10 @@ ESP8266WebServer::Hook_f hookWebDAVForWebserver (const String& davRootDir, ESPWe
     {
         int idx = url.indexOf(davRootDir);
         if (idx != 0)
-            return false;
-        dav.parseRequest(method, url, client, contentType);
-        return true;
+            return ESP8266WebServer::CLIENT_REQUEST_CAN_CONTINUE;
+        if (dav.parseRequest(method, url, client, contentType))
+            return ESP8266WebServer::CLIENT_REQUEST_IS_HANDLED;
+        else
+            return ESP8266WebServer::CLIENT_MUST_STOP;
     };
 }

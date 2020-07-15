@@ -426,8 +426,10 @@ void ESPWebDAVCore::handleRequest()
     if (method.equals("COPY"))
         return handleCopy(resource, file);
 
-    // if reached here, means its a 404
+    // if reached here, means its a unhandled
     handleIssue(404, "Not found");
+
+    //return false;
 }
 
 
@@ -1256,7 +1258,7 @@ void ESPWebDAVCore::_prepareHeader(String& response, const String& code, const c
 }
 
 
-void ESPWebDAVCore::parseRequest(const String& givenMethod,
+bool ESPWebDAVCore::parseRequest(const String& givenMethod,
                                  const String& givenUri,
                                  WiFiClient* givenClient,
                                  ContentType_f givenContentTypeFn)
@@ -1337,11 +1339,14 @@ void ESPWebDAVCore::parseRequest(const String& givenMethod,
     }
     DBG_PRINTF("<<<<<<<<<< RECV\n");
 
-    handleRequest();
+    bool ret = true;
+    /*ret =*/ handleRequest();
 
     // finalize the response
     if (_chunked)
         sendContent("");
+
+    return ret;
 }
 
 size_t ESPWebDAVCore::readBytesWithTimeout(uint8_t *buf, size_t size)
