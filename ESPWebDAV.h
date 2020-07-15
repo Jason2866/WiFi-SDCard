@@ -123,6 +123,7 @@ protected:
 
     bool copyFile (File file, const String& destName);
     bool deleteDir (const String& dir);
+    bool mkFullDir (String fullDir);
 
     void processClient(THandlerFunction handler, const String& message);
     void handleIssue (int code, const char* text);

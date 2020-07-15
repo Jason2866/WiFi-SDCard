@@ -106,10 +106,6 @@ void ESPWebDAV::handleClient()
     // extract uri, headers etc
     parseRequest();
 
-    // finalize the response
-    if (_chunked)
-        sendContent("");
-
     if (!m_persistent)
         // close the connection
         locClient.stop();
@@ -131,14 +127,7 @@ void ESPWebDAV::parseRequest()
         return;
     }
 
-    DBG_PRINTF("############################################\n");
-    DBG_PRINTF(">>>>>>>>>> RECV\n");
     method = req.substring(0, addr_start);
     uri = urlDecode(req.substring(addr_start + 1, addr_end));
-    DBG_PRINT("method: ");
-    DBG_PRINT(method);
-    DBG_PRINT(" url: ");
-    DBG_PRINTLN(uri);
-
     ESPWebDAVCore::parseRequest(method, uri, &locClient, getMimeType);
 }

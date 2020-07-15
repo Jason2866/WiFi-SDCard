@@ -333,7 +333,6 @@ void ESPWebDAVCore::handleIssue(int code, const char* text)
 void ESPWebDAVCore::handleRequest()
 {
     payload.clear();
-    stripSlashes(uri);
 
     ResourceType resource = RESOURCE_NONE;
 
@@ -478,8 +477,6 @@ void ESPWebDAVCore::handleLock(ResourceType resource)
         */
         ownash = 0xdeadbeef;
     }
-    DBG_PRINTF("asker: 0x%08x\n", ownash);
-    stripSlashes(uri);
     uint32_t pash = crc32(uri.c_str(), uri.length());
     const auto& lock = _locks.find(pash);
     if (lock == _locks.end())
@@ -558,7 +555,6 @@ void ESPWebDAVCore::handleLock(ResourceType resource)
 void ESPWebDAVCore::handleUnlock(ResourceType resource)
 {
 #if WEBDAV_LOCK_SUPPORT > 1
-    stripSlashes(uri);
     uint32_t pash = crc32(uri.c_str(), uri.length());
 
     uint32_t hpash, hownash;
@@ -918,7 +914,6 @@ void ESPWebDAVCore::handleDirectoryCreate(ResourceType resource)
     if (resource != RESOURCE_NONE)
         return handleIssue(405, "Not allowed");
 
-    stripSlashes(uri);
     int parentLastIndex = uri.lastIndexOf('/');
     if (parentLastIndex > 0)
     {
@@ -935,7 +930,8 @@ void ESPWebDAVCore::handleDirectoryCreate(ResourceType resource)
         return;
     }
 
-    DBG_PRINT(uri);	DBG_PRINTLN(" directory created");
+    DBG_PRINT(uri);
+    DBG_PRINTLN(" directory created");
     send("201 Created", NULL, "");
 }
 
@@ -1017,6 +1013,24 @@ void ESPWebDAVCore::handleMove(ResourceType resource, File& src)
 }
 
 
+bool ESPWebDAVCore::mkFullDir (String fullDir)
+{
+    bool ret = true;
+    stripSlashes(fullDir);
+    for (int idx = 0; (idx = fullDir.indexOf('/', idx + 1)) > 0; )
+    {
+///XXXoptiomizeme without substr
+        if (!gfs->mkdir(fullDir.substring(0, idx)))
+        {
+            ret = false;
+            break;
+        }
+Serial.printf("MKDIROK: '%s'\n", uri.substring(0, idx).c_str());
+    }
+    return ret;
+}
+
+
 bool ESPWebDAVCore::deleteDir (const String& dir)
 {
     dirAction(dir, true, [this](int depth, const String& parent, Dir& entry)->bool
@@ -1032,10 +1046,12 @@ bool ESPWebDAVCore::deleteDir (const String& dir)
             return ok;
         });
 
+    DBG_PRINTF("delete dir '%s'\n", uri.c_str());
     gfs->rmdir(uri);
     // observation: with littleFS, when the last file of a directory is
-    // removed, the parent directory is removed.
-    // XXX or ensure it is not there anymore
+    // removed, the parent directory is removed, hierarchy must be rebuilded.
+    mkFullDir(uri);
+
     return true;
 }
 
@@ -1062,7 +1078,7 @@ void ESPWebDAVCore::handleDelete(ResourceType resource)
     // need to leave it there (also to pass compliance tests).
     int parentIdx = uri.lastIndexOf('/');
     uri.remove(parentIdx);
-    gfs->mkdir(uri);
+    mkFullDir(uri);
 
     if (!retVal)
     {
@@ -1247,8 +1263,12 @@ void ESPWebDAVCore::parseRequest(const String& givenMethod,
 {
     method = givenMethod;
     uri = givenUri;
+    stripSlashes(uri);
     client = givenClient;
     contentTypeFn = givenContentTypeFn;
+
+    DBG_PRINTF("############################################\n");
+    DBG_PRINTF(">>>>>>>>>> RECV\n");
 
     DBG_PRINT("method: ");
     DBG_PRINT(method);
@@ -1318,6 +1338,10 @@ void ESPWebDAVCore::parseRequest(const String& givenMethod,
     DBG_PRINTF("<<<<<<<<<< RECV\n");
 
     handleRequest();
+
+    // finalize the response
+    if (_chunked)
+        sendContent("");
 }
 
 size_t ESPWebDAVCore::readBytesWithTimeout(uint8_t *buf, size_t size)
@@ -1393,29 +1417,37 @@ bool ESPWebDAVCore::sendContent(const char* data, size_t size)
         if (client->write(chunkSize, l) != l)
             return false;
         DBG_PRINTF("---- chunk %s\n", chunkSize);
-
-        //XXXFIXME client->printf("%x...
     }
 
+#if DBG_WEBDAV
     DBG_PRINTF("---- %scontent (%d bytes):\n", _chunked ? "chunked " : "", (int)size);
     for (size_t i = 0; i < DEBUG_LEN && i < size; i++)
         DBG_PRINTF("%c", data[i] < 32 || data[i] > 127 ? '.' : data[i]);
     if (size > DEBUG_LEN) DBG_PRINTF("...");
     DBG_PRINTF("\n");
+#endif
 
     if (client->write(data, size) != size)
+    {
+        DBG_PRINTF("SHORT WRITE\n");
         return false;
+    }
 
     if (_chunked)
     {
         if (client->write("\r\n", 2) != 2)
+        {
+            DBG_PRINTF("SHORT WRITE 2\n");
             return false;
+        }
         if (size == 0)
         {
+            DBG_PRINTF("END OF CHUNKS\n");
             _chunked = false;
         }
     }
 
+    DBG_PRINTF("OK with sendContent\n");
     return true;
 }
 
@@ -1436,18 +1468,26 @@ bool  ESPWebDAVCore::sendContent_P(PGM_P content)
     }
 
     if (client->write_P(content, size) != size)
+    {
+        DBG_PRINTF("SHORT WRITE\n");
         return false;
+    }
 
     if (_chunked)
     {
         if (client->write(footer, 2) != 2)
+        {
+            DBG_PRINTF("SHORT WRITE 2\n");
             return false;
+        }
         if (size == 0)
         {
+            DBG_PRINTF("END OF CHUNKS\n");
             _chunked = false;
         }
     }
 
+    DBG_PRINTF("OK with sendContent_P\n");
     return true;
 }
 
