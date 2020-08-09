@@ -1,16 +1,13 @@
 
 #include <WebDav4WebServer.h>
 
-ESP8266WebServer::Hook_f hookWebDAVForWebserver (const String& davRootDir, ESPWebDAVCore& dav)
+ESP8266WebServer::HookFunction hookWebDAVForWebserver(const String& davRootDir, ESPWebDAVCore& dav)
 {
-    return [&dav, davRootDir](const String& method, const String& url, WiFiClient* client, ESP8266WebServer::ContentType_f contentType)
+    return [&dav, davRootDir](const String & method, const String & url, WiFiClient * client, ESP8266WebServer::ContentTypeFunction contentType)
     {
-        int idx = url.indexOf(davRootDir);
-        if (idx != 0)
-            return ESP8266WebServer::CLIENT_REQUEST_CAN_CONTINUE;
-        if (dav.parseRequest(method, url, client, contentType))
-            return ESP8266WebServer::CLIENT_REQUEST_IS_HANDLED;
-        else
-            return ESP8266WebServer::CLIENT_MUST_STOP;
+        return
+            url.indexOf(davRootDir) != 0 ? ESP8266WebServer::CLIENT_REQUEST_CAN_CONTINUE :
+            dav.parseRequest(method, url, client, contentType) ? ESP8266WebServer::CLIENT_REQUEST_IS_HANDLED :
+            ESP8266WebServer::CLIENT_MUST_STOP;
     };
 }

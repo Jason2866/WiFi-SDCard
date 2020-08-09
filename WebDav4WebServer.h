@@ -6,6 +6,6 @@
 #include <ESP8266WebServer.h>
 
 extern "C"
-ESP8266WebServer::Hook_f hookWebDAVForWebserver (const String& davRootDir, ESPWebDAVCore& dav);
+ESP8266WebServer::HookFunction hookWebDAVForWebserver(const String& davRootDir, ESPWebDAVCore& dav);
 
 #endif // __WEBDAV4WEBSERVER
