@@ -14,8 +14,8 @@ Protocol support has been extended thanks to the esp8266/Arduino emulation
 environment which allowed to make the porting easier.
 
 Current version has been tested with 
-- linux: davfs2
-- linux: gvfs/gio (but this one also has issues with an apache webdav server)
+- linux: davfs2 (fuse FS)
+- linux: gvfs/gio (but this one has issues, also with an apache webdav server)
 - macOS Finder
 - windows explorer
 
@@ -29,6 +29,9 @@ Also added / fixed:
 - Initial proof of concept with virtual /proc file<br/>
   to reflect some live state without writing any file<br/>
   (best would be to have a virtual FS)
+- Integrated with ESP8266WebServer via a hook API.<br/>
+  WebDav and Webserver can now live on the same port.<br/>
+  Example: Hooked.ino (needs 3.0.0-dev esp8266 core)
 
 ### Testing
 
