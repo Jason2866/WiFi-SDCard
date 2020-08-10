@@ -1,6 +1,8 @@
 
 #include <WebDav4WebServer.h>
 
+#if WEBSERVER_HAS_HOOK
+
 ESP8266WebServer::HookFunction hookWebDAVForWebserver(const String& davRootDir, ESPWebDAVCore& dav)
 {
     return [&dav, davRootDir](const String & method, const String & url, WiFiClient * client, ESP8266WebServer::ContentTypeFunction contentType)
@@ -11,3 +13,5 @@ ESP8266WebServer::HookFunction hookWebDAVForWebserver(const String& davRootDir, 
             ESP8266WebServer::CLIENT_MUST_STOP;
     };
 }
+
+#endif // WEBSERVER_HAS_HOOK

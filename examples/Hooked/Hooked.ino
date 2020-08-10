@@ -55,6 +55,10 @@
 #include <LittleFS.h>
 #include <WebDav4WebServer.h>
 
+#if !WEBSERVER_HAS_HOOK
+#error This sketch needs ESP8266WebServer::HookFunction and ESP8266WebServer::addHook
+#endif
+
 #define HOSTNAME    "ESPWebDAV"
 
 #ifndef STASSID

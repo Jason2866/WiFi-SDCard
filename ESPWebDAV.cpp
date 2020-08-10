@@ -1118,7 +1118,7 @@ bool ESPWebDAVCore::copyFile(File srcFile, const String& destName)
         ///XXX USE STREAMTO
         yield();
         char cp[128];
-        auto nb = srcFile.read((uint8_t*)cp, sizeof(cp));
+        int nb = srcFile.read((uint8_t*)cp, sizeof(cp));
         if (!nb)
         {
             DBG_PRINTF("copy: short read\n");
