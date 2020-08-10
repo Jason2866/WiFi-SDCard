@@ -1027,7 +1027,6 @@ bool ESPWebDAVCore::mkFullDir(String fullDir)
             ret = false;
             break;
         }
-        Serial.printf("MKDIROK: '%s'\n", uri.substring(0, idx).c_str());
     }
     return ret;
 }
