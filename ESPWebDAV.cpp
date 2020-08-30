@@ -645,10 +645,21 @@ void ESPWebDAVCore::handleProp(ResourceType resource, File& file)
         }
     }
 
+    if (payload.indexOf(F("quota-available-bytes")) >= 0 ||
+        payload.indexOf(F("quota-used-bytes")) >= 0)
+    {
+        fs::FSInfo64 info;
+        if (gfs->info64(info))
+        {
+            sendContentProp(F("quota-available-bytes"), String(1.0 * (info.totalBytes - info.usedBytes), 0));
+            sendContentProp(F("quota-used-bytes"), String(1.0 * info.usedBytes, 0));
+        }
+    }
+
     sendContent(F("</D:multistatus>"));
 }
 
-void ESPWebDAVCore::sendProp1Response(const String& what, const String& response)
+void ESPWebDAVCore::sendContentProp(const String& what, const String& response)
 {
     String one;
     one.reserve(100 + 2 * what.length() + response.length());
@@ -681,27 +692,20 @@ void ESPWebDAVCore::sendPropResponse(bool isDir, const String& fullResPath, size
     blah += F("</D:href><D:propstat><D:status>HTTP/1.1 200 OK</D:status><D:prop>");
     sendContent(blah);
 
-    sendProp1Response(F("getlastmodified"), date2date(lastWrite));
-    sendProp1Response(F("creationdate"), date2date(creationDate));
+    sendContentProp(F("getlastmodified"), date2date(lastWrite));
+    sendContentProp(F("creationdate"), date2date(creationDate));
 
     DBG_PRINTF("-----\nentry: '%s'(dir:%d)\n-----\n",
                fullResPath.c_str(), isDir);
 
     if (isDir)
     {
-        fs::FSInfo64 info;
-        if (gfs->info64(info))
-        {
-            sendProp1Response("quota-available-bytes", String(1.0 * (info.totalBytes - info.usedBytes), 0));
-            sendProp1Response("quota-used-bytes", String(1.0 * info.usedBytes, 0));
-        }
-
-        sendProp1Response(F("resourcetype"), F("<D:collection/>"));
+        sendContentProp(F("resourcetype"), F("<D:collection/>"));
     }
     else
     {
-        sendProp1Response(F("getcontentlength"), String(size));
-        sendProp1Response(F("getcontenttype"), contentTypeFn(fullResPath));
+        sendContentProp(F("getcontentlength"), String(size));
+        sendContentProp(F("getcontenttype"), contentTypeFn(fullResPath));
 
         sendContent("<resourcetype/>");
 
@@ -709,10 +713,10 @@ void ESPWebDAVCore::sendPropResponse(bool isDir, const String& fullResPath, size
         sprintf(entityTag, "%s%lu", uri.c_str(), (unsigned long)lastWrite);
         uint32_t crc = crc32(entityTag, strlen(entityTag));
         sprintf(entityTag, "\"%08x\"", crc);
-        sendProp1Response(F("getetag"), entityTag);
+        sendContentProp(F("getetag"), entityTag);
     }
 
-    sendProp1Response(F("displayname"), fullResPath);
+    sendContentProp(F("displayname"), fullResPath);
 
     sendContent(F("</D:prop></D:propstat></D:response>"));
 }
