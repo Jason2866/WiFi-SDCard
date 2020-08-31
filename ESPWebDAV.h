@@ -113,7 +113,14 @@ public:
 
     bool parseRequest(const String& method, const String& uri, WiFiClient* client, ContentTypeFunction contentType);
 
+    static String enc2c (const String& encoded);
+    static String c2enc (const String& decoded);
+
 protected:
+
+    static int htoi (char c);
+    static int hhtoi (const char* c);
+    static char itoH (int c);
 
     //XXXFIXME this function must be replaced by some Stream::to()
     size_t readBytesWithTimeout(uint8_t *buf, size_t size);

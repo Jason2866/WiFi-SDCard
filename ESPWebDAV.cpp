@@ -1529,3 +1529,58 @@ void ESPWebDAVCore::processRange(const String& range)
 }
 
 
+int ESPWebDAVCore::htoi (char c)
+{
+    c = tolower(c);
+    return c >= '0' && c <= '9' ? c - '0':
+           c >= 'a' && c <= 'f' ? c - 'a' + 10:
+           -1;
+}
+
+char ESPWebDAVCore::itoH (int c)
+{
+    return c <= 9? c + '0': c - 10 + 'A';
+}
+
+int ESPWebDAVCore::hhtoi (const char* c)
+{
+    int h = htoi(*c);
+    int l = htoi(*(c+1));
+    return h < 0 || l < 0? -1: (h << 4) + l;
+}
+
+String ESPWebDAVCore::enc2c (const String& encoded)
+{
+    String ret = encoded;
+    for (size_t i = 0; i < ret.length() - 2; i++)
+        if (ret[i] == '%')
+        {
+            int v = hhtoi(&(ret.c_str()[i + 1]));
+            if (v > 0)
+            {
+                ret[i] = v < 128? (char)v: '=';
+                ret.remove(i + 1, 2);
+            }
+        }
+    return ret;
+}
+
+String ESPWebDAVCore::c2enc (const String& decoded)
+{
+    size_t l = decoded.length();
+    for (size_t i = 0; i < decoded.length() - 2; i++)
+        if (!isalnum(decoded[i]))
+            l += 2;
+    String ret;
+    ret.reserve(l);
+    for (size_t i = 0; i < decoded.length(); i++)
+        if (isalnum(decoded[i]))
+            ret += decoded[i];
+        else
+        {
+            ret += '%';
+            ret += itoH(decoded[i] >> 4);
+            ret += itoH(decoded[i] & 7);
+        }
+    return ret;
+}
