@@ -10,12 +10,14 @@ cmd="$1"
 
 if [ "$cmd" = clean ]; then
     make clean
+    cd -
+    set -x
+    rm -f ../../examples/../*.o
 else
     [ "$cmd" = run ] && cmd=""
     shift
     set -ex
-    make ULIBDIRS=$LIBS FORCE32=0 V=1 ${exdir}/${EXAMPLE}
+    make -j ULIBDIRS=$LIBS FORCE32=0 V=1 ${exdir}/${EXAMPLE}
     $cmd ./bin/${EXAMPLE}/${EXAMPLE} "$@"
+    stty sane
 fi
-
-stty sane
