@@ -57,6 +57,7 @@ const char *wdays[]  = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 
 #define PROC "proc" // simple virtual file. TODO XXX real virtual fs with user callbacks
 
+
 void ESPWebDAVCore::stripSlashes(String& name)
 {
     size_t i = 0;
@@ -69,12 +70,14 @@ void ESPWebDAVCore::stripSlashes(String& name)
 
 #if WEBDAV_LOCK_SUPPORT
 
+
 void ESPWebDAVCore::makeToken(String& ret, uint32_t pash, uint32_t ownash)
 {
     char lock_token[17];
     snprintf(lock_token, sizeof(lock_token), "%08x%08x", pash, ownash);
     ret = lock_token;
 }
+
 
 int ESPWebDAVCore::extractLockToken(const String& someHeader, const char* start, const char* end, uint32_t& pash, uint32_t& ownash)
 {
@@ -121,6 +124,7 @@ int ESPWebDAVCore::extractLockToken(const String& someHeader, const char* start,
 
 #endif // WEBDAV_LOCK_SUPPORT
 
+
 int ESPWebDAVCore::allowed(const String& uri, uint32_t ownash)
 {
 #if WEBDAV_LOCK_SUPPORT > 1
@@ -154,6 +158,7 @@ int ESPWebDAVCore::allowed(const String& uri, uint32_t ownash)
 #endif
 }
 
+
 int ESPWebDAVCore::allowed(const String& uri, const String& xml /* = emptyString */)
 {
     uint32_t hpash, anyownash;
@@ -174,6 +179,7 @@ int ESPWebDAVCore::allowed(const String& uri, const String& xml /* = emptyString
     }
     return allowed(uri, anyownash);
 }
+
 
 void ESPWebDAVCore::stripName(String& name)
 {
@@ -207,6 +213,7 @@ void ESPWebDAVCore::dir(const String& path, Print* out)
     }, /*false=subdir first*/false);
 }
 
+
 size_t ESPWebDAVCore::makeVirtual(virt_e v, String& internal)
 {
     if (v == VIRT_PROC)
@@ -217,6 +224,7 @@ size_t ESPWebDAVCore::makeVirtual(virt_e v, String& internal)
     return internal.length();
 }
 
+
 ESPWebDAVCore::virt_e ESPWebDAVCore::isVirtual(const String& uri)
 {
     const char* n = &(uri.c_str()[0]);
@@ -226,6 +234,7 @@ ESPWebDAVCore::virt_e ESPWebDAVCore::isVirtual(const String& uri)
         return VIRT_PROC;
     return VIRT_NONE;
 }
+
 
 bool ESPWebDAVCore::getPayload(StreamString& payload)
 {
@@ -257,6 +266,7 @@ bool ESPWebDAVCore::getPayload(StreamString& payload)
     }
     return true;
 }
+
 
 bool ESPWebDAVCore::dirAction(const String& path,
                               bool recursive,
@@ -306,6 +316,7 @@ bool ESPWebDAVCore::dirAction(const String& path,
     return true;
 }
 
+
 void ESPWebDAVCore::handleIssue(int code, const char* text)
 {
     String message;
@@ -329,6 +340,7 @@ void ESPWebDAVCore::handleIssue(int code, const char* text)
 
     send(err, "text/plain", message);
 }
+
 
 void ESPWebDAVCore::handleRequest()
 {
@@ -431,7 +443,6 @@ void ESPWebDAVCore::handleRequest()
 
     //return false;
 }
-
 
 
 void ESPWebDAVCore::handleOptions(ResourceType resource)
@@ -553,7 +564,6 @@ void ESPWebDAVCore::handleLock(ResourceType resource)
 }
 
 
-
 void ESPWebDAVCore::handleUnlock(ResourceType resource)
 {
 #if WEBDAV_LOCK_SUPPORT > 1
@@ -583,11 +593,13 @@ void ESPWebDAVCore::handleUnlock(ResourceType resource)
 
 #endif // WEBDAV_LOCK_SUPPORT
 
+
 void ESPWebDAVCore::handlePropPatch(ResourceType resource, File& file)
 {
     DBG_PRINTLN("PROPPATCH forwarding to PROPFIND");
     handleProp(resource, file);
 }
+
 
 void ESPWebDAVCore::handleProp(ResourceType resource, File& file)
 {
@@ -646,7 +658,7 @@ void ESPWebDAVCore::handleProp(ResourceType resource, File& file)
     }
 
     if (payload.indexOf(F("quota-available-bytes")) >= 0 ||
-        payload.indexOf(F("quota-used-bytes")) >= 0)
+            payload.indexOf(F("quota-used-bytes")) >= 0)
     {
         fs::FSInfo64 info;
         if (gfs->info64(info))
@@ -658,6 +670,7 @@ void ESPWebDAVCore::handleProp(ResourceType resource, File& file)
 
     sendContent(F("</D:multistatus>"));
 }
+
 
 void ESPWebDAVCore::sendContentProp(const String& what, const String& response)
 {
@@ -673,6 +686,7 @@ void ESPWebDAVCore::sendContentProp(const String& what, const String& response)
     sendContent(one);
 }
 
+
 String ESPWebDAVCore::date2date(time_t date)
 {
     // get & convert time to required format
@@ -682,6 +696,7 @@ String ESPWebDAVCore::date2date(time_t date)
     snprintf(buf, sizeof(buf), "%s, %02d %s %04d %02d:%02d:%02d GMT", wdays[gTm->tm_wday], gTm->tm_mday, months[gTm->tm_mon], gTm->tm_year + 1900, gTm->tm_hour, gTm->tm_min, gTm->tm_sec);
     return buf;
 }
+
 
 void ESPWebDAVCore::sendPropResponse(bool isDir, const String& fullResPath, size_t size, time_t lastWrite, time_t creationDate)
 {
@@ -720,6 +735,7 @@ void ESPWebDAVCore::sendPropResponse(bool isDir, const String& fullResPath, size
 
     sendContent(F("</D:prop></D:propstat></D:response>"));
 }
+
 
 void ESPWebDAVCore::handleGet(ResourceType resource, File& file, bool isGet)
 {
@@ -818,12 +834,22 @@ void ESPWebDAVCore::handleGet(ResourceType resource, File& file, bool isGet)
 #endif
 
                 remaining -= numRead;
+                if (transferStatusFn)
+                {
+                    int p = (100 * (file.size() - remaining)) / file.size();
+                    if (p != percent)
+                    {
+                        transferStatusFn(file.name(), percent = p, false);
+                    }
+                }
                 DBG_PRINTF("wrote %d bytes to http client\n", (int)numRead);
             }
+        }
     }
 
     DBG_PRINT("File "); DBG_PRINT(fileSize); DBG_PRINT(" bytes sent in: "); DBG_PRINT((millis() - tStart) / 1000); DBG_PRINTLN(" sec");
 }
+
 
 void ESPWebDAVCore::handlePut(ResourceType resource)
 {
@@ -941,6 +967,7 @@ void ESPWebDAVCore::handleDirectoryCreate(ResourceType resource)
     send("201 Created", NULL, "");
 }
 
+
 String ESPWebDAVCore::urlToUri(const String& url)
 {
     int index;
@@ -951,6 +978,7 @@ String ESPWebDAVCore::urlToUri(const String& url)
     }
     return url;
 }
+
 
 void ESPWebDAVCore::handleMove(ResourceType resource, File& src)
 {
@@ -1060,6 +1088,7 @@ bool ESPWebDAVCore::deleteDir(const String& dir)
     return true;
 }
 
+
 void ESPWebDAVCore::handleDelete(ResourceType resource)
 {
     DBG_PRINTF("Processing DELETE '%s'\n", uri.c_str());
@@ -1140,6 +1169,7 @@ bool ESPWebDAVCore::copyFile(File srcFile, const String& destName)
     dest.close();
     return true;
 }
+
 
 void ESPWebDAVCore::handleCopy(ResourceType resource, File& src)
 {
@@ -1233,6 +1263,7 @@ void ESPWebDAVCore::handleCopy(ResourceType resource, File& src)
     DBG_PRINTLN("COPY successful\n");
     send(successCode, NULL, "");
 }
+
 
 void ESPWebDAVCore::_prepareHeader(String& response, const String& code, const char* content_type, size_t contentLength)
 {
@@ -1352,6 +1383,7 @@ bool ESPWebDAVCore::parseRequest(const String& givenMethod,
     return ret;
 }
 
+
 size_t ESPWebDAVCore::readBytesWithTimeout(uint8_t *buf, size_t size)
 {
     size_t where = 0;
@@ -1383,7 +1415,6 @@ void ESPWebDAVCore::sendHeader(const String& name, const String& value, bool fir
 }
 
 
-
 void ESPWebDAVCore::send(const String& code, const char* content_type, const String& content)
 {
     String header;
@@ -1409,11 +1440,11 @@ void ESPWebDAVCore::send(const String& code, const char* content_type, const Str
 }
 
 
-
 bool ESPWebDAVCore::sendContent(const String& content)
 {
     return sendContent(content.c_str(), content.length());
 }
+
 
 bool ESPWebDAVCore::sendContent(const char* data, size_t size)
 {
@@ -1460,7 +1491,6 @@ bool ESPWebDAVCore::sendContent(const char* data, size_t size)
 }
 
 
-
 bool  ESPWebDAVCore::sendContent_P(PGM_P content)
 {
     const char * footer = "\r\n";
@@ -1500,11 +1530,11 @@ bool  ESPWebDAVCore::sendContent_P(PGM_P content)
 }
 
 
-
 void ESPWebDAVCore::setContentLength(size_t len)
 {
     _contentLengthAnswer = len;
 }
+
 
 void ESPWebDAVCore::processRange(const String& range)
 {
@@ -1529,43 +1559,47 @@ void ESPWebDAVCore::processRange(const String& range)
 }
 
 
-int ESPWebDAVCore::htoi (char c)
+int ESPWebDAVCore::htoi(char c)
 {
     c = tolower(c);
-    return c >= '0' && c <= '9' ? c - '0':
-           c >= 'a' && c <= 'f' ? c - 'a' + 10:
+    return c >= '0' && c <= '9' ? c - '0' :
+           c >= 'a' && c <= 'f' ? c - 'a' + 10 :
            -1;
 }
 
-char ESPWebDAVCore::itoH (int c)
+
+char ESPWebDAVCore::itoH(int c)
 {
-    return c <= 9? c + '0': c - 10 + 'A';
+    return c <= 9 ? c + '0' : c - 10 + 'A';
 }
 
-int ESPWebDAVCore::hhtoi (const char* c)
+
+int ESPWebDAVCore::hhtoi(const char* c)
 {
     int h = htoi(*c);
-    int l = htoi(*(c+1));
-    return h < 0 || l < 0? -1: (h << 4) + l;
+    int l = htoi(*(c + 1));
+    return h < 0 || l < 0 ? -1 : (h << 4) + l;
 }
 
-String ESPWebDAVCore::enc2c (const String& encoded)
+
+String ESPWebDAVCore::enc2c(const String& encoded)
 {
     String ret = encoded;
-    for (size_t i = 0; i < ret.length() - 2; i++)
+    for (size_t i = 0; ret.length() >= 2 && i < ret.length() - 2; i++)
         if (ret[i] == '%')
         {
-            int v = hhtoi(&(ret.c_str()[i + 1]));
+            int v = hhtoi(ret.c_str() + i + 1);
             if (v > 0)
             {
-                ret[i] = v < 128? (char)v: '=';
+                ret[i] = v < 128 ? (char)v : '=';
                 ret.remove(i + 1, 2);
             }
         }
     return ret;
 }
 
-String ESPWebDAVCore::c2enc (const String& decoded)
+
+String ESPWebDAVCore::c2enc(const String& decoded)
 {
     size_t l = decoded.length();
     for (size_t i = 0; i < decoded.length() - 2; i++)
