@@ -103,6 +103,10 @@ void setup()
     gfs.begin();
     gfs.mkdir("/dav");
     dav.begin(&gfs);
+    dav.setTransferStatusCallback([](const char* name, int percent, bool receive)
+    {
+        Serial.printf("%s: '%s': %d%%\n", receive? "recv": "send", name, percent);
+    });
     server.addHook(hookWebDAVForWebserver("/dav", dav));
     server.begin();
     Serial.println("HTTP server started");

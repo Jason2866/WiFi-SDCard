@@ -194,6 +194,15 @@ void ESPWebDAVCore::stripName(String& name)
     }
 }
 
+
+void ESPWebDAVCore::stripHost(String& name)
+{
+    int remove = name.indexOf(hostHeader);
+    if (remove >= 0)
+        name.remove(0, remove + hostHeader.length());
+}
+
+
 void ESPWebDAVCore::dir(const String& path, Print* out)
 {
     dirAction(path, true, [out](int depth, const String & parent, Dir & entry)->bool
@@ -646,12 +655,11 @@ void ESPWebDAVCore::handleProp(ResourceType resource, File& file)
         while (entry.next())
         {
             yield();
-            String name = entry.fileName();
             String path;
-            path.reserve(uri.length() + 1 + name.length());
+            path.reserve(uri.length() + 1 + entry.fileName().length());
             path += uri;
             path += '/';
-            path += name;
+            path += entry.fileName();
             stripSlashes(path);
             sendPropResponse(entry.isDirectory(), path.c_str(), entry.fileSize(), entry.fileTime(), entry.fileCreationTime());
         }
@@ -770,7 +778,7 @@ void ESPWebDAVCore::handleGet(ResourceType resource, File& file, bool isGet)
         return;
     }
 
-    char buf[128]; /// XXX use stream:to(): file.to(client);
+    char buf[128]; /// XXX use stream::to(): file.to(client);
 
     // Content-Range: bytes 0-1023/146515
     // Content-Length: 1024
@@ -806,13 +814,22 @@ void ESPWebDAVCore::handleGet(ResourceType resource, File& file, bool isGet)
 
         if (internal.length())
         {
+            if (transferStatusFn)
+                transferStatusFn(file.name(), (100 * _rangeStart) / fileSize, false);
             if ((chunked && !sendContent(&internal.c_str()[_rangeStart], remaining))
                     || (!chunked && client->write(&internal.c_str()[_rangeStart], remaining) != (size_t)remaining))
             {
                 DBG_PRINTF("file->net short transfer");
             }
+            else if (transferStatusFn)
+                transferStatusFn(file.name(), (100 * (_rangeStart + remaining)) / fileSize, false);
         }
         else
+        {
+            if (transferStatusFn)
+                transferStatusFn(file.name(), 0, false);
+            int percent = 0;
+
             while (remaining > 0 && file.available())
             {
                 size_t toRead = (size_t)remaining > sizeof(buf) ? sizeof(buf) : remaining;
@@ -881,6 +898,10 @@ void ESPWebDAVCore::handlePut(ResourceType resource)
 #endif
         size_t numRemaining = contentLengthHeader;
 
+        if (transferStatusFn)
+            transferStatusFn(file.name(), 0, true);
+        int percent = 0;
+
         // read data from stream and write to the file
         while (numRemaining > 0)
         {
@@ -905,6 +926,14 @@ void ESPWebDAVCore::handlePut(ResourceType resource)
 
             // reduce the number outstanding
             numRemaining -= numRead;
+            if (transferStatusFn)
+            {
+                int p = (100 * (contentLengthHeader - numRemaining)) / contentLengthHeader;
+                if (p != percent)
+                {
+                    transferStatusFn(file.name(), percent = p, true);
+                }
+            }
         }
 
         // detect timeout condition
@@ -993,7 +1022,8 @@ void ESPWebDAVCore::handleMove(ResourceType resource, File& src)
         return handleIssue(404, "Not found");
     }
 
-    String dest = urlToUri(destinationHeader);
+    String dest = enc2c(urlToUri(destinationHeader));
+    stripHost(dest);
     stripSlashes(dest);
     stripName(dest);
     DBG_PRINT("Move destination: "); DBG_PRINTLN(dest);
@@ -1298,7 +1328,7 @@ bool ESPWebDAVCore::parseRequest(const String& givenMethod,
                                  ContentTypeFunction givenContentTypeFn)
 {
     method = givenMethod;
-    uri = givenUri;
+    uri = enc2c(givenUri);
     stripSlashes(uri);
     client = givenClient;
     contentTypeFn = givenContentTypeFn;
@@ -1608,13 +1638,16 @@ String ESPWebDAVCore::c2enc(const String& decoded)
     String ret;
     ret.reserve(l);
     for (size_t i = 0; i < decoded.length(); i++)
-        if (isalnum(decoded[i]))
-            ret += decoded[i];
+    {
+        char c = decoded[i];
+        if (isalnum(c) || c == '.' || c == '-' || c == '_')
+            ret += c;
         else
         {
             ret += '%';
             ret += itoH(decoded[i] >> 4);
-            ret += itoH(decoded[i] & 7);
+            ret += itoH(decoded[i] & 0xf);
         }
+    }
     return ret;
 }

@@ -43,11 +43,11 @@
 
 //#define DBG_WEBDAV 1
 
-#if CORE_MOCK
+#if CORE_MOCK && !defined(DBG_WEBDAV)
 #define DBG_WEBDAV 1
 #endif
 
-#if !defined(DBG_WEBDAV) && defined(DEBUG_ESP_PORT)
+#if !defined(DBG_WEBDAV) && defined(DEBUG_ESP_PORT) && !defined(NDEBUG)
 #define DBG_WEBDAV 1
 #define DBG_WEBDAV_PORT DEBUG_ESP_PORT
 #endif
@@ -87,6 +87,7 @@ public:
     enum DepthType { DEPTH_NONE, DEPTH_CHILD, DEPTH_ALL };
 
     typedef String(*ContentTypeFunction)(const String&);
+    using TransferStatusCallback = std::function<void(const char* name, int percent, bool receive)>;
 
     void begin(FS* gfs)
     {
@@ -99,9 +100,6 @@ public:
             _maxPathLength = 16;
     }
 
-    static void stripSlashes(String& name);
-    static String date2date(time_t date);
-
     bool dirAction(
         const String& path,
         bool recursive,
@@ -113,14 +111,21 @@ public:
 
     bool parseRequest(const String& method, const String& uri, WiFiClient* client, ContentTypeFunction contentType);
 
-    static String enc2c (const String& encoded);
-    static String c2enc (const String& decoded);
+    void setTransferStatusCallback(const TransferStatusCallback& cb)
+    {
+        transferStatusFn = cb;
+    }
+
+    static void stripSlashes(String& name);
+    static String date2date(time_t date);
+    static String enc2c(const String& encoded);
+    static String c2enc(const String& decoded);
 
 protected:
 
-    static int htoi (char c);
-    static int hhtoi (const char* c);
-    static char itoH (int c);
+    static int htoi(char c);
+    static int hhtoi(const char* c);
+    static char itoH(int c);
 
     //XXXFIXME this function must be replaced by some Stream::to()
     size_t readBytesWithTimeout(uint8_t *buf, size_t size);
@@ -166,6 +171,7 @@ protected:
     int extractLockToken(const String& someHeader, const char* start, const char* end, uint32_t& pash, uint32_t& ownash);
     bool getPayload(StreamString& payload);
     void stripName(String& name);
+    void stripHost(String& name);
     String urlToUri(const String& url);
 
     enum virt_e { VIRT_NONE, VIRT_PROC };
@@ -176,13 +182,13 @@ protected:
     constexpr static int m_persistent_timer_init_ms = 5000;
     long unsigned int m_persistent_timer_ms;
     bool        m_persistent;
-    FS*         gfs;
+    FS*         gfs = nullptr;
     int         _maxPathLength;
 
     String      method;
     String      uri;
     StreamString payload;
-    WiFiClient* client;
+    WiFiClient* client = nullptr;
 
     size_t 		contentLengthHeader;
     String 		depthHeader;
@@ -206,6 +212,7 @@ protected:
 #endif
 
     ContentTypeFunction contentTypeFn = nullptr;
+    TransferStatusCallback transferStatusFn = nullptr;
 };
 
 class ESPWebDAV: public ESPWebDAVCore
@@ -227,9 +234,9 @@ protected:
     static String getMimeType(const String& path);
     String urlDecode(const String& text);
 
-    void parseRequest();
+    bool parseRequest();
 
-    WiFiServer* server;
+    WiFiServer* server = nullptr;
     WiFiClient  locClient;
 };
 

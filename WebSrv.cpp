@@ -88,6 +88,9 @@ String ESPWebDAV::urlDecode(const String& text)
 
 void ESPWebDAV::handleClient()
 {
+    if (!server)
+        return;
+
     if (server->hasClient())
     {
         if (!locClient || !locClient.available())
@@ -112,7 +115,7 @@ void ESPWebDAV::handleClient()
 }
 
 
-void ESPWebDAV::parseRequest()
+bool ESPWebDAV::parseRequest()
 {
     // Read the first line of HTTP request
     String req = locClient.readStringUntil('\r');
@@ -124,10 +127,10 @@ void ESPWebDAV::parseRequest()
     int addr_end = req.indexOf(' ', addr_start + 1);
     if (addr_start == -1 || addr_end == -1)
     {
-        return;
+        return false;
     }
 
     method = req.substring(0, addr_start);
     uri = urlDecode(req.substring(addr_start + 1, addr_end));
-    ESPWebDAVCore::parseRequest(method, uri, &locClient, getMimeType);
+    return ESPWebDAVCore::parseRequest(method, uri, &locClient, getMimeType);
 }
