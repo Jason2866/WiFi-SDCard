@@ -1,6 +1,7 @@
 # WebDAV server library
 
-This is a continuation of @ardyesp's [initial work](https://github.com/ardyesp/ESPWebDAV).
+This "v2" branch is a continuation of @ardyesp's [initial work](https://github.com/ardyesp/ESPWebDAV).
+<br/>(the former "v3" branch has been merged into "v2")
 
 ### 3D Printer
 
