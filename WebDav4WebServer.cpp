@@ -1,17 +1,24 @@
 
 #include <WebDav4WebServer.h>
 
-#if WEBSERVER_HAS_HOOK
 
-ESP8266WebServer::HookFunction hookWebDAVForWebserver(const String& davRootDir, ESPWebDAVCore& dav)
+#if WEBSERVER_HAS_HOOK
+WebServer::HookFunction hookWebDAVForWebserver(const String& davRootDir, ESPWebDAVCore& dav)
 {
-    return [&dav, davRootDir](const String & method, const String & url, WiFiClient * client, ESP8266WebServer::ContentTypeFunction contentType)
+    return [&dav, davRootDir](const String & method, const String & url, WiFiClient * client, WebServer::ContentTypeFunction contentType)
     {
-        return
-            url.indexOf(davRootDir) != 0 ? ESP8266WebServer::CLIENT_REQUEST_CAN_CONTINUE :
-            dav.parseRequest(method, url, client, contentType) ? ESP8266WebServer::CLIENT_REQUEST_IS_HANDLED :
-            ESP8266WebServer::CLIENT_MUST_STOP;
+        if (url.indexOf(davRootDir) != 0) {
+            DBG_PRINT ("CLIENT_REQUEST_CAN_CONTINUE, %s is not seen in %s", davRootDir.c_str(), url.c_str());
+            return WebServer::CLIENT_REQUEST_CAN_CONTINUE;
+        } else {
+            if (dav.parseRequest(method, url, client, contentType)){
+                DBG_PRINT ("CLIENT_REQUEST_IS_HANDLED");
+                return WebServer::CLIENT_REQUEST_IS_HANDLED;
+            } else {
+                DBG_PRINT ("CLIENT_MUST_STOP");
+                return WebServer::CLIENT_MUST_STOP;
+            }
+        }
     };
 }
-
 #endif // WEBSERVER_HAS_HOOK
