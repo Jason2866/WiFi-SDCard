@@ -105,7 +105,7 @@ void setup()
     dav.begin(&gfs);
     dav.setTransferStatusCallback([](const char* name, int percent, bool receive)
     {
-        Serial.printf("%s: '%s': %d%%\n", receive? "recv": "send", name, percent);
+        Serial.printf("%s: '%s': %d%%\n", receive ? "recv" : "send", name, percent);
     });
     server.addHook(hookWebDAVForWebserver("/dav", dav));
     server.begin();

@@ -44,13 +44,14 @@
 #include <WiFi.h>
 #include "PolledTimeout_esp32.h"
 #include <rom/miniz.h>
-const char * FileName(const char * path) {
+const char * FileName(const char * path)
+{
     String name = path;
-    if (name=="/")return path;
+    if (name == "/")return path;
     //path should not end by / if yes need to add a sanity check
     int p = name.lastIndexOf("/");
-    if (p==-1) return path;
-    return  &path[p+1];
+    if (p == -1) return path;
+    return  &path[p + 1];
 }
 #undef crc32
 #define crc32(a, len) mz_crc32( 0xffffffff,(const unsigned char *)a, len)
@@ -61,7 +62,7 @@ const char * FileName(const char * path) {
 #define GETCREATIONTIME(f) f.getLastWrite()
 #define FILECREATIONTIME(f) f.getLastWrite()
 #define ISFILE(f) !f.isDirectory()
-//in esp32 totalbytes and usedbytes are not part of FS class 
+//in esp32 totalbytes and usedbytes are not part of FS class
 //so need to call an helper to address directly SPIFFS/LITTLEFS/SD/etc...
 //but due to https://support.microsoft.com/en-us/topic/webdav-mapped-drive-reports-incorrect-drive-capacity-fa101657-7448-1ce6-5999-5bcc59d6a8bd
 //this is not used / working
@@ -304,7 +305,7 @@ bool ESPWebDAVCore::getPayload(StreamString& payload)
 #if defined(ARDUINO_ARCH_ESP32)
         PolledTimeout timeout(HTTP_MAX_POST_WAIT);
 #endif //ARDUINO_ARCH_ESP32
-       
+
         while (payload.length() < (size_t)contentLengthHeader)
         {
             uint8_t buf[16];
@@ -312,7 +313,7 @@ bool ESPWebDAVCore::getPayload(StreamString& payload)
             if (n <= 0 && timeout)
             {
                 DBG_PRINT("get content: short read (%d < %d)",
-                           (int)payload.length(), (int)contentLengthHeader);
+                          (int)payload.length(), (int)contentLengthHeader);
                 return false;
             }
             if (n > 0)
@@ -322,7 +323,7 @@ bool ESPWebDAVCore::getPayload(StreamString& payload)
             }
         }
         DBG_PRINT(">>>>>>>>>>> CONTENT:");
-        DBG_PRINTSHORT("%s",payload.c_str());
+        DBG_PRINTSHORT("%s", payload.c_str());
         DBG_PRINTSHORT("\n");
         DBG_PRINT("<<<<<<<<<<< CONTENT");
     }
@@ -339,17 +340,17 @@ bool ESPWebDAVCore::dirAction(const String& path,
     DBG_PRINT("diraction: scanning dir '%s'", path.c_str());
 #if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
     Dir entry = gfs->openDir(path);
-    while (entry.next()) 
+    while (entry.next())
 #endif //ARDUINO_ARCH_ESP8266
 #if defined(ARDUINO_ARCH_ESP32)
-    File root = gfs->open(path);
+        File root = gfs->open(path);
     File entry = root.openNextFile();
-    while(entry)
+    while (entry)
 #endif //ARDUINO_ARCH_ESP32
-        {
+    {
         if (!entry.isDirectory())
         {
-            DBG_PRINT("diraction: %s/%s (%d B): ", path.c_str(), FILENAME(entry),  (int)FILESIZE(entry));
+            DBG_PRINT("diraction: %s/%s (%d B): ", path.c_str(), FILENAME(entry), (int)FILESIZE(entry));
             if (cb(depth, path, entry))
             {
                 DBG_PRINT("(file-OK)");
@@ -369,13 +370,13 @@ bool ESPWebDAVCore::dirAction(const String& path,
 #if defined(ARDUINO_ARCH_ESP32)
         root = gfs->open(path);
         entry = root.openNextFile();
-        while(entry)
+        while (entry)
 #endif //ARDUINO_ARCH_ESP32
 #if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
-        entry = gfs->openDir(path);
+            entry = gfs->openDir(path);
         while (entry.next())
 #endif //ARDUINO_ARCH_ESP8266
-            {
+        {
             if (entry.isDirectory())
             {
                 DBG_PRINT("diraction: -------- %s/%s/", path.c_str(), FILENAME(entry));
@@ -392,7 +393,7 @@ bool ESPWebDAVCore::dirAction(const String& path,
                 }
             }
 #if defined(ARDUINO_ARCH_ESP32)
-                entry = root.openNextFile();
+            entry = root.openNextFile();
 #endif //ARDUINO_ARCH_ESP32
         }
     }
@@ -440,10 +441,11 @@ void ESPWebDAVCore::handleRequest()
             depth = DEPTH_CHILD;
         else if (depthHeader.equals("infinity"))
             depth = DEPTH_ALL;
-        DBG_PRINT("Depth: %d",depth);
+        DBG_PRINT("Depth: %d", depth);
     }
     File file;
-    if (gfs->exists(uri) || (uri=="/")){
+    if (gfs->exists(uri) || (uri == "/"))
+    {
         // does uri refer to a file or directory or a null?
         file = gfs->open(uri, "r");
         if (file)
@@ -453,11 +455,13 @@ void ESPWebDAVCore::handleRequest()
         }
         else
             DBG_PRINT("resource: '%s': no file nor dir", uri.c_str());
-    } else {
-       DBG_PRINT("resource: '%s': not exists", uri.c_str()); 
+    }
+    else
+    {
+        DBG_PRINT("resource: '%s': not exists", uri.c_str());
     }
 
-    DBG_PRINT("m: %s",method.c_str());
+    DBG_PRINT("m: %s", method.c_str());
     DBG_PRINT(" r: %d", resource);
     DBG_PRINT(" u: %s", uri.c_str());
 
@@ -721,16 +725,16 @@ void ESPWebDAVCore::handleProp(ResourceType resource, File& file)
     else
     {
         DBG_PRINT("----- PROP DIR '%s':", uri.c_str());
-        sendPropResponse(true, uri ,0, time(nullptr), 0);
+        sendPropResponse(true, uri, 0, time(nullptr), 0);
 
 #if defined(ARDUINO_ARCH_ESP32)
         File root = gfs->open(uri);
         File entry = root.openNextFile();
-        while(entry)
+        while (entry)
 #endif //ARDUINO_ARCH_ESP32
 #if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
-        Dir entry = gfs->openDir(uri);
-        while (entry.next()) 
+            Dir entry = gfs->openDir(uri);
+        while (entry.next())
 #endif //ARDUINO_ARCH_ESP8266
         {
             yield();
@@ -761,14 +765,14 @@ void ESPWebDAVCore::handleProp(ResourceType resource, File& file)
 #endif //ARDUINO_ARCH_ESP8266
 #if defined(ARDUINO_ARCH_ESP32)
         //NEED TO BE not related to SPIFFS
-        //use external functions 
+        //use external functions
         //but SPIFFS/FAT size_t because in MB
         //and SD uint64_t because in GB
         //so use uint64_t
         sendContentProp(F("quota-available-bytes"), String(1.0 * (TotalBytes() - UsedBytes()), 0));
         sendContentProp(F("quota-used-bytes"), String(1.0 * UsedBytes(), 0));
 #endif //ARDUINO_ARCH_ESP32
-        
+
     }
 
     sendContent(F("</D:multistatus>"));
@@ -814,7 +818,7 @@ void ESPWebDAVCore::sendPropResponse(bool isDir, const String& fullResPath, size
     sendContentProp(F("creationdate"), date2date(creationDate));
 
     DBG_PRINT("-----\nentry: '%s'(dir:%d)\n-----",
-               fullResPath.c_str(), isDir);
+              fullResPath.c_str(), isDir);
 
     if (isDir)
     {
@@ -959,7 +963,7 @@ void ESPWebDAVCore::handleGet(ResourceType resource, File& file, bool isGet)
         }
     }
 
-    DBG_PRINT("File %d bytes sent in: %d sec", fileSize,(millis() - tStart) / 1000);
+    DBG_PRINT("File %d bytes sent in: %d sec", fileSize, (millis() - tStart) / 1000);
 }
 
 
@@ -982,18 +986,18 @@ void ESPWebDAVCore::handlePut(ResourceType resource)
     if (!(file = gfs->open(uri, "w")))
 #endif //ARDUINO_ARCH_ESP8266
 #if defined(ARDUINO_ARCH_ESP32)
-    String s = uri;
-    if (uri[0]!='/')s = "/" + uri;
+        String s = uri;
+    if (uri[0] != '/')s = "/" + uri;
     DBG_PRINT("Create file %s", s.c_str());
     if (!(file = gfs->open(s, "w")))
 #endif //ARDUINO_ARCH_ESP32
-        {
+    {
         return handleWriteError("Unable to create a new file", file);
-        }
+    }
 
     // file is created/open for writing at this point
     // did server send any data in put
-    DBG_PRINT("%s - ready for data (%i bytes)", uri.c_str(),(int)contentLengthHeader);
+    DBG_PRINT("%s - ready for data (%i bytes)", uri.c_str(), (int)contentLengthHeader);
 
     if (contentLengthHeader != 0)
     {
@@ -1045,7 +1049,7 @@ void ESPWebDAVCore::handlePut(ResourceType resource)
         if (numRemaining)
             return handleWriteError("Timed out waiting for data", file);
 
-        DBG_PRINT("File %d  bytes stored in: %d sec",(contentLengthHeader - numRemaining), ((millis() - tStart) / 1000)); 
+        DBG_PRINT("File %d  bytes stored in: %d sec", (contentLengthHeader - numRemaining), ((millis() - tStart) / 1000));
     }
 
     DBG_PRINT("file written ('%s': %d = %d bytes)", String(file.name()).c_str(), (int)contentLengthHeader, (int)file.size());
@@ -1065,7 +1069,7 @@ void ESPWebDAVCore::handleWriteError(const String& message, File& file)
     gfs->remove(uri);
     // send error
     send("500 Internal Server Error", "text/plain", message);
-    DBG_PRINT("%s",message.c_str());
+    DBG_PRINT("%s", message.c_str());
 }
 
 
@@ -1137,7 +1141,7 @@ void ESPWebDAVCore::handleMove(ResourceType resource, File& src)
         return handleIssue(code, "Locked");
 
     File destFile;
-    if (gfs->exists(dest) || (dest=="/")) destFile = gfs->open(dest, "r");
+    if (gfs->exists(dest) || (dest == "/")) destFile = gfs->open(dest, "r");
     if (destFile && !ISFILE(destFile))
     {
         dest += '/';
@@ -1280,12 +1284,12 @@ bool ESPWebDAVCore::copyFile(File srcFile, const String& destName)
 #endif //ARDUINO_ARCH_ESP8266
 #if defined(ARDUINO_ARCH_ESP32)
     String s = destName;
-     if (destName[0]!='/')s = "/" + destName;
-     dest = gfs->open(s, "w");
-     DBG_PRINT("Create file %s", s.c_str());
+    if (destName[0] != '/')s = "/" + destName;
+    dest = gfs->open(s, "w");
+    DBG_PRINT("Create file %s", s.c_str());
 #endif //ARDUINO_ARCH_ESP32
     if (!dest)
-    {   
+    {
         handleIssue(413, "Request Entity Too Large");
         return false;
     }
@@ -1353,9 +1357,9 @@ void ESPWebDAVCore::handleCopy(ResourceType resource, File& src)
     }
 
     DBG_PRINT("copy: src='%s'=>'%s' dest='%s'=>'%s' parent:'%s'",
-               uri.c_str(), FILEFULLNAME(src),
-               destinationHeader.c_str(), destPath.c_str(),
-               destParentPath.c_str());
+              uri.c_str(), FILEFULLNAME(src),
+              destinationHeader.c_str(), destPath.c_str(),
+              destParentPath.c_str());
     File destParent = gfs->open(destParentPath, "r");
 
     stripName(destPath);
@@ -1450,8 +1454,8 @@ bool ESPWebDAVCore::parseRequest(const String& givenMethod,
     DBG_PRINT("############################################");
     DBG_PRINT(">>>>>>>>>> RECV");
 
-    DBG_PRINT("method: %s",method.c_str());
-    DBG_PRINT(" url: %s",uri.c_str());
+    DBG_PRINT("method: %s", method.c_str());
+    DBG_PRINT(" url: %s", uri.c_str());
 
     // parse and finish all headers
     String headerName;
