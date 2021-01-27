@@ -28,7 +28,7 @@
 */
 
 #include <FS.h>
-#if defined(ARDUINO_ARCH_ESP8266)
+#if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
 #include <ESP8266WiFi.h>
 #include <coredecls.h> // crc32()
 #include <PolledTimeout.h>
@@ -267,7 +267,7 @@ size_t ESPWebDAVCore::makeVirtual(virt_e v, String& internal)
 {
     if (v == VIRT_PROC)
     {
-#if defined(ARDUINO_ARCH_ESP8266)
+#if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
         internal = ESP.getFullVersion();
 #endif //ARDUINO_ARCH_ESP8266
 #if defined(ARDUINO_ARCH_ESP32)
@@ -298,7 +298,7 @@ bool ESPWebDAVCore::getPayload(StreamString& payload)
     if (contentLengthHeader > 0)
     {
         payload.reserve(contentLengthHeader);
-#if defined(ARDUINO_ARCH_ESP8266)
+#if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
         esp8266::polledTimeout::oneShotFastMs timeout(HTTP_MAX_POST_WAIT);
 #endif //ARDUINO_ARCH_ESP8266
 #if defined(ARDUINO_ARCH_ESP32)
@@ -337,7 +337,7 @@ bool ESPWebDAVCore::dirAction(const String& path,
                               int depth)
 {
     DBG_PRINT("diraction: scanning dir '%s'", path.c_str());
-#if defined(ARDUINO_ARCH_ESP8266)
+#if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
     Dir entry = gfs->openDir(path);
     while (entry.next()) 
 #endif //ARDUINO_ARCH_ESP8266
@@ -371,7 +371,7 @@ bool ESPWebDAVCore::dirAction(const String& path,
         entry = root.openNextFile();
         while(entry)
 #endif //ARDUINO_ARCH_ESP32
-#if defined(ARDUINO_ARCH_ESP8266)
+#if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
         entry = gfs->openDir(path);
         while (entry.next())
 #endif //ARDUINO_ARCH_ESP8266
@@ -728,7 +728,7 @@ void ESPWebDAVCore::handleProp(ResourceType resource, File& file)
         File entry = root.openNextFile();
         while(entry)
 #endif //ARDUINO_ARCH_ESP32
-#if defined(ARDUINO_ARCH_ESP8266)
+#if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
         Dir entry = gfs->openDir(uri);
         while (entry.next()) 
 #endif //ARDUINO_ARCH_ESP8266
@@ -751,7 +751,7 @@ void ESPWebDAVCore::handleProp(ResourceType resource, File& file)
     if (payload.indexOf(F("quota-available-bytes")) >= 0 ||
             payload.indexOf(F("quota-used-bytes")) >= 0)
     {
-#if defined(ARDUINO_ARCH_ESP8266)
+#if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
         fs::FSInfo64 info;
         if (gfs->info64(info))
         {
@@ -978,7 +978,7 @@ void ESPWebDAVCore::handlePut(ResourceType resource)
     File file;
     stripName(uri);
     DBG_PRINT("create file '%s'", uri.c_str());
-#if defined(ARDUINO_ARCH_ESP8266)
+#if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
     if (!(file = gfs->open(uri, "w")))
 #endif //ARDUINO_ARCH_ESP8266
 #if defined(ARDUINO_ARCH_ESP32)
@@ -1275,7 +1275,7 @@ bool ESPWebDAVCore::copyFile(File srcFile, const String& destName)
             return false;
         }
     }
-#if defined(ARDUINO_ARCH_ESP8266)
+#if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
     dest = gfs->open(destName, "w");
 #endif //ARDUINO_ARCH_ESP8266
 #if defined(ARDUINO_ARCH_ESP32)

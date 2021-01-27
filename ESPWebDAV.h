@@ -58,7 +58,7 @@
 #ifndef DBG_WEBDAV_PORT
 #define DBG_WEBDAV_PORT Serial
 #endif
-#if defined(ARDUINO_ARCH_ESP8266)
+#if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
 #define pathToFileName(p) p
 #endif //ARDUINO_ARCH_ESP8266
 #define DBG_PRINT(format, ...) {DBG_WEBDAV_PORT.printf("[%s:%u] %s(): " format "\r\n", pathToFileName(__FILE__), __LINE__, __FUNCTION__, ##__VA_ARGS__);}
@@ -78,7 +78,7 @@
 #include <map>
 #endif
 #include <functional>
-#if defined(ARDUINO_ARCH_ESP8266)
+#if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
 #include <ESP8266WiFi.h>
 #endif //ARDUINO_ARCH_ESP8266
 #if defined(ARDUINO_ARCH_ESP32)
@@ -101,7 +101,7 @@ public:
     void begin(FS* gfs)
     {
         this->gfs = gfs;
-#if defined(ARDUINO_ARCH_ESP8266)
+#if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
         fs::FSInfo64 info;
         if (gfs->info64(info))
             _maxPathLength = info.maxPathLength;

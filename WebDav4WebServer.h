@@ -3,7 +3,7 @@
 #define __WEBDAV4WEBSERVER
 
 #include <ESPWebDAV.h>
-#if defined(ARDUINO_ARCH_ESP8266)
+#if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
 #include <ESP8266WebServer.h>
 using WebServer = ESP8266WebServer;
 #endif //ARDUINO_ARCH_ESP8266
