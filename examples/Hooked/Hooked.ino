@@ -66,6 +66,8 @@
 #define STAPSK "psk"
 #endif
 
+#define DAV "/dav"
+
 //FS& gfs = SPIFFS;
 FS& gfs = LittleFS;
 //FS& gfs = SDFS;
@@ -73,6 +75,24 @@ FS& gfs = LittleFS;
 ESP8266WebServer server(80);
 
 ESPWebDAVCore dav;
+
+static const char TEXT_PLAIN[] PROGMEM = "text/plain";
+
+void notFound ()
+{
+    String nf = DAV;
+    nf += ESP8266WebServer::urlDecode(server.uri());
+    Serial.printf("User request for HTTP file '%s' from '" DAV "'\n", nf.c_str() + sizeof(DAV));
+    // open file 'DAV nf' (/dav/userfilename)
+    File f = gfs.open(nf.c_str(), "r");
+    if (!f)
+    {
+        Serial.printf("not found: '%s'\n", nf.c_str());
+        server.send(404, FPSTR(TEXT_PLAIN), nf);
+    }
+    Serial.printf("found, streaming with HTTP (not webdav)\n");
+    server.streamFile(f, F("application/octet-stream"));
+}
 
 // ------------------------
 void setup()
@@ -101,13 +121,14 @@ void setup()
     MDNS.begin(HOSTNAME);
 
     gfs.begin();
-    gfs.mkdir("/dav");
+    gfs.mkdir(DAV);
     dav.begin(&gfs);
     dav.setTransferStatusCallback([](const char* name, int percent, bool receive)
     {
         Serial.printf("%s: '%s': %d%%\n", receive ? "recv" : "send", name, percent);
     });
-    server.addHook(hookWebDAVForWebserver("/dav", dav));
+    server.addHook(hookWebDAVForWebserver(DAV, dav));
+    server.onNotFound(notFound);
     server.begin();
     Serial.println("HTTP server started");
     Serial.println("WebDAV server started");
