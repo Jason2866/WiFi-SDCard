@@ -13,8 +13,12 @@ using WebServer = ESP8266WebServer;
 
 #if WEBSERVER_HAS_HOOK
 
-extern "C"
-WebServer::HookFunction hookWebDAVForWebserver(const String& davRootDir, ESPWebDAVCore& dav);
+// fsRootDIR is the FS destination path where the "DAV root dir" files are stored
+// when not specified / by default, fsRootDir is the same as davRootDir.
+// (see example)
+
+WebServer::HookFunction hookWebDAVForWebserver(const String& davRootDir, ESPWebDAVCore& dav, const String& fsRootDir = emptyString);
+
 #endif // WEBSERVER_HAS_HOOK
 
 #endif // __WEBDAV4WEBSERVER

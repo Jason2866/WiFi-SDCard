@@ -430,6 +430,7 @@ void ESPWebDAVCore::handleIssue(int code, const char* text)
 void ESPWebDAVCore::handleRequest()
 {
     payload.clear();
+    replaceFront(uri, _davRoot, _fsRoot);
 
     ResourceType resource = RESOURCE_NONE;
 
@@ -733,7 +734,7 @@ void ESPWebDAVCore::handleProp(ResourceType resource, File& file)
         while (entry)
 #endif //ARDUINO_ARCH_ESP32
 #if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
-            Dir entry = gfs->openDir(uri);
+        Dir entry = gfs->openDir(uri);
         while (entry.next())
 #endif //ARDUINO_ARCH_ESP8266
         {
@@ -805,8 +806,11 @@ String ESPWebDAVCore::date2date(time_t date)
 }
 
 
-void ESPWebDAVCore::sendPropResponse(bool isDir, const String& fullResPath, size_t size, time_t lastWrite, time_t creationDate)
+void ESPWebDAVCore::sendPropResponse(bool isDir, const String& fullResPathFS, size_t size, time_t lastWrite, time_t creationDate)
 {
+    String fullResPath = fullResPathFS;
+    replaceFront(fullResPath, _fsRoot, _davRoot);
+
     String blah;
     blah.reserve(100);
     blah += F("<D:response xmlns:esp=\"DAV:\"><D:href>");
@@ -847,11 +851,16 @@ void ESPWebDAVCore::sendPropResponse(bool isDir, const String& fullResPath, size
 void ESPWebDAVCore::handleGet(ResourceType resource, File& file, bool isGet)
 {
     DBG_PRINT("Processing GET (ressource=%d)", (int)resource);
-    auto v = isVirtual(uri);
 
     // does URI refer to an existing file resource
-    if (resource != RESOURCE_FILE && !v)
-        return handleIssue(404, "Not found");
+    auto v = isVirtual(uri);
+    if (!v)
+    {
+        if (resource == RESOURCE_DIR)
+            return handleIssue(200, "GET/HEAD on dir");
+        if (resource != RESOURCE_FILE)
+            return handleIssue(404, "Not found");
+    }
 
     // no lock on GET
 
@@ -963,7 +972,7 @@ void ESPWebDAVCore::handleGet(ResourceType resource, File& file, bool isGet)
         }
     }
 
-    DBG_PRINT("File %d bytes sent in: %d sec", fileSize, (millis() - tStart) / 1000);
+    DBG_PRINT("File %zu bytes sent in: %ld sec", fileSize, (millis() - tStart) / 1000);
 }
 
 
@@ -1049,7 +1058,7 @@ void ESPWebDAVCore::handlePut(ResourceType resource)
         if (numRemaining)
             return handleWriteError("Timed out waiting for data", file);
 
-        DBG_PRINT("File %d  bytes stored in: %d sec", (contentLengthHeader - numRemaining), ((millis() - tStart) / 1000));
+        DBG_PRINT("File %zu bytes stored in: %ld sec", (contentLengthHeader - numRemaining), ((millis() - tStart) / 1000));
     }
 
     DBG_PRINT("file written ('%s': %d = %d bytes)", String(file.name()).c_str(), (int)contentLengthHeader, (int)file.size());
@@ -1116,6 +1125,21 @@ String ESPWebDAVCore::urlToUri(const String& url)
     return url;
 }
 
+void ESPWebDAVCore::replaceFront (String& str, const String& from, const String& to)
+{
+    if (from.length() && to.length() && str.indexOf(from) == 0)
+    {
+        DBG_PRINT("replaceFront(%s, %s): %s -> ", from.c_str(), to.c_str(), str.c_str());
+        String repl;
+        repl.reserve(str.length() + to.length() - from.length() + 1);
+        repl = to;
+        size_t skip = from.length() == 1? 0: from.length();
+        repl += str.c_str() + skip;
+        str = repl;
+        stripSlashes(str);
+        DBG_PRINT("%s\n", str.c_str());
+    }
+}
 
 void ESPWebDAVCore::handleMove(ResourceType resource, File& src)
 {
@@ -1134,6 +1158,8 @@ void ESPWebDAVCore::handleMove(ResourceType resource, File& src)
     stripHost(dest);
     stripSlashes(dest);
     stripName(dest);
+    replaceFront(dest, _davRoot, _fsRoot);
+
     DBG_PRINT("Move destination: %s", dest.c_str());
 
     int code;
@@ -1355,6 +1381,8 @@ void ESPWebDAVCore::handleCopy(ResourceType resource, File& src)
                 destParentPath.remove(lastSlash);
         }
     }
+    replaceFront(destPath, _davRoot, _fsRoot);
+    replaceFront(destParentPath, _davRoot, _fsRoot);
 
     DBG_PRINT("copy: src='%s'=>'%s' dest='%s'=>'%s' parent:'%s'",
               uri.c_str(), FILEFULLNAME(src),

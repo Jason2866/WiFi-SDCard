@@ -127,7 +127,7 @@ void setup()
     {
         Serial.printf("%s: '%s': %d%%\n", receive ? "recv" : "send", name, percent);
     });
-    server.addHook(hookWebDAVForWebserver(DAV, dav));
+    server.addHook(hookWebDAVForWebserver(DAV, dav, "/")); // '/dav/' on URL is stored on '/' on FS
     server.onNotFound(notFound);
     server.begin();
     Serial.println("HTTP server started");

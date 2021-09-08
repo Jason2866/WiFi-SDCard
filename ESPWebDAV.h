@@ -61,12 +61,12 @@
 #if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
 #define pathToFileName(p) p
 #endif //ARDUINO_ARCH_ESP8266
-#define DBG_PRINT(format, ...) {DBG_WEBDAV_PORT.printf("[%s:%u] %s(): " format "\r\n", pathToFileName(__FILE__), __LINE__, __FUNCTION__, ##__VA_ARGS__);}
-#define DBG_PRINTSHORT(...)     { DBG_WEBDAV_PORT.printf(__VA_ARGS__); }
+#define DBG_PRINT(format, ...) { DBG_WEBDAV_PORT.printf("[%s:%u] %s(): " format "\r\n", pathToFileName(__FILE__), __LINE__, __FUNCTION__, ##__VA_ARGS__);}
+#define DBG_PRINTSHORT(...)    { DBG_WEBDAV_PORT.printf(__VA_ARGS__); }
 #else
 // production
-#define DBG_PRINT(...)      { }
-#define DBG_PRINTSHORT(...)     { }
+#define DBG_PRINT(...)         { }
+#define DBG_PRINTSHORT(...)    { }
 #endif
 
 // constants for WebServer
@@ -130,10 +130,14 @@ public:
         transferStatusFn = cb;
     }
 
+    void setDAVRoot (const String& davRoot) { _davRoot = davRoot; }
+    void setFsRoot (const String& fsRoot) { _fsRoot = fsRoot; }
+
     static void stripSlashes(String& name);
     static String date2date(time_t date);
     static String enc2c(const String& encoded);
     static String c2enc(const String& decoded);
+    static void replaceFront (String& str, const String& from, const String& to);
 
 protected:
 
@@ -227,6 +231,12 @@ protected:
 
     ContentTypeFunction contentTypeFn = nullptr;
     TransferStatusCallback transferStatusFn = nullptr;
+
+    // allowing to rewrite DAV root in FS
+    //                  (dav://<server>/<davroot>/path <=> FS://<fsroot>/path)
+    // empty by default (dav://<server>/<davroot>/path <=> FS://<davroot>/path)
+    String      _davRoot;
+    String      _fsRoot;
 };
 
 class ESPWebDAV: public ESPWebDAVCore
