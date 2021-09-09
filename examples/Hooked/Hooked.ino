@@ -66,7 +66,7 @@
 #define STAPSK "psk"
 #endif
 
-#define DAV "/dav"
+#define DAVROOT "/"         // this is the WebDAV root-URL directory, / is allowed
 
 //FS& gfs = SPIFFS;
 FS& gfs = LittleFS;
@@ -80,18 +80,24 @@ static const char TEXT_PLAIN[] PROGMEM = "text/plain";
 
 void notFound ()
 {
-    String nf = DAV;
+    String nf = DAVROOT;
     nf += ESP8266WebServer::urlDecode(server.uri());
-    Serial.printf("User request for HTTP file '%s' from '" DAV "'\n", nf.c_str() + sizeof(DAV));
-    // open file 'DAV nf' (/dav/userfilename)
+    Serial.printf("User request for HTTP file '%s' from '" DAVROOT "'\n", nf.c_str() + sizeof(DAVROOT));
+    // open file 'DAVROOT nf' (/dav/userfilename)
     File f = gfs.open(nf.c_str(), "r");
     if (!f)
     {
         Serial.printf("not found: '%s'\n", nf.c_str());
-        server.send(404, FPSTR(TEXT_PLAIN), nf);
+        server.send(404, FPSTR(TEXT_PLAIN), "webserver's notfound/404");
     }
-    Serial.printf("found, streaming with HTTP (not webdav)\n");
-    server.streamFile(f, F("application/octet-stream"));
+    else
+    {
+        // This is a reachable piece of code if the file is
+        // explicitally ignored in dav.setIgnored({}),
+        // or if DAVROOT is not '/'.
+        Serial.printf("found, streaming with HTTP (not webdav)\n");
+        server.streamFile(f, F("application/octet-stream"));
+    }
 }
 
 // ------------------------
@@ -121,14 +127,30 @@ void setup()
     MDNS.begin(HOSTNAME);
 
     gfs.begin();
-    gfs.mkdir(DAV);
+    gfs.mkdir(DAVROOT);
     dav.begin(&gfs);
     dav.setTransferStatusCallback([](const char* name, int percent, bool receive)
     {
         Serial.printf("%s: '%s': %d%%\n", receive ? "recv" : "send", name, percent);
     });
-    server.addHook(hookWebDAVForWebserver(DAV, dav, "/")); // '/dav/' on URL is stored on '/' on FS
-    server.onNotFound(notFound);
+
+    // setup webserver's Hook for WebDAV,
+    // optionally: DAVROOT/some/path on URL is translated to 'somewhere/else/some/path' on FS
+    server.addHook(hookWebDAVForWebserver(DAVROOT, dav, /*optional, replace DAVROOT by this on FS:*/ "/"));
+
+    ////
+    // Allow some paths within the WebDAV namespace to be served by the regular webwerver
+    //
+    // 1. provide a callback to verify what to ignore to WebDAV (=> thus served by webserver)
+    dav.setIgnored([] (const String& uri) { return uri == F("/index.html") || uri == F("/another.html") || uri == F("/notfound.html"); });
+    //
+    // 2. setup regular web pages callbacks (only meaningful when paths are ignored by WebDAV, like above)
+    server.on(F("/index.html"), [] () { server.send_P(200, PSTR("text/html"), PSTR("<meta http-equiv=\"Refresh\" content=\"0;url=another.html\">")); });
+    server.on(F("/another.html"), [] () { server.send_P(200, PSTR("text/html"), PSTR("<button style=\"background-color:red;color:orange;\" onclick=\"window.location.href='notfound.html';\">heaven</button>")); });
+    //
+    ////
+
+    server.onNotFound(notFound); // useless when DAVROOT is "/" because WebDAV handles locations first (unless ignored)
     server.begin();
     Serial.println("HTTP server started");
     Serial.println("WebDAV server started");

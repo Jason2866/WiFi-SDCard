@@ -130,8 +130,12 @@ public:
         transferStatusFn = cb;
     }
 
+    bool isIgnored (const String& uri) { return _userIgnoreFunction && _userIgnoreFunction(uri); }
+    void setIgnored (std::function<bool(const String& uri)> userFunction) { _userIgnoreFunction = userFunction; }
+
+    const String& getDAVRoot () { return _davRoot; }
     void setDAVRoot (const String& davRoot) { _davRoot = davRoot; }
-    void setFsRoot (const String& fsRoot) { _fsRoot = fsRoot; }
+    void setFsRoot  (const String& fsRoot)  { _fsRoot = fsRoot; }
 
     static void stripSlashes(String& name);
     static String date2date(time_t date);
@@ -231,6 +235,8 @@ protected:
 
     ContentTypeFunction contentTypeFn = nullptr;
     TransferStatusCallback transferStatusFn = nullptr;
+
+    std::function<bool(const String& uri)> _userIgnoreFunction = nullptr;
 
     // allowing to rewrite DAV root in FS
     //                  (dav://<server>/<davroot>/path <=> FS://<fsroot>/path)
