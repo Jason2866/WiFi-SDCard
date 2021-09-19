@@ -1,6 +1,6 @@
 {
     "name": "ESPWebDAV",
-    "version": "2.1.2",
+    "version": "2.1.3",
     "keywords": "esp8266, WebDAV",
     "description": "WebDav server compatible with linux, macOS, windows",
     "authors": [
