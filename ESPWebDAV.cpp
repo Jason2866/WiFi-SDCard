@@ -1216,21 +1216,21 @@ bool ESPWebDAVCore::mkFullDir(String fullDir)
 {
     bool ret = true;
     stripSlashes(fullDir);
-    for (int idx = 0; (idx = fullDir.indexOf('/', idx + 1)) > 0;)
+
+    int idx = 0;
+    while (idx != -1)
     {
-        ///XXXoptiomizeme without substr
-        if (!gfs->mkdir(fullDir.substring(0, idx)))
-        {
-            ret = false;
-            break;
-        }
+        idx = fullDir.indexOf('/', idx + 1);
+        String part = idx == -1? /*last part*/fullDir: fullDir.substring(0, idx);
+        ret = gfs->mkdir(part); // might already exist, keeping on
     }
-    return ret;
+    return ret; // return last action success
 }
 
 
 bool ESPWebDAVCore::deleteDir(const String& dir)
 {
+    // delete content of directory
     dirAction(dir, true, [this](int depth, const String & parent, Dir & entry)->bool
     {
         (void)depth;
@@ -1244,15 +1244,11 @@ bool ESPWebDAVCore::deleteDir(const String& dir)
         return ok;
     });
 
-    DBG_PRINT("delete dir '%s'", uri.c_str());
-    gfs->rmdir(uri);
-    // observation: with littleFS, when the last file of a directory is
-    // removed, the parent directory is removed, hierarchy must be rebuilded.
-    mkFullDir(uri);
+    DBG_PRINT("Delete dir '%s'", dir.c_str());
+    gfs->rmdir(dir);
 
     return true;
 }
-
 
 void ESPWebDAVCore::handleDelete(ResourceType resource)
 {
@@ -1268,16 +1264,26 @@ void ESPWebDAVCore::handleDelete(ResourceType resource)
 
     bool retVal;
     if (resource == RESOURCE_FILE)
-        // delete a file
         retVal = gfs->remove(uri);
     else
         retVal = deleteDir(uri);
 
+    DBG_PRINT("handleDelete: uri='%s' ress=%s ret=%d\n", uri.c_str(), resource == RESOURCE_FILE?"file":"dir", retVal);
     // for some reason, parent dir can be removed if empty
     // need to leave it there (also to pass compliance tests).
     int parentIdx = uri.lastIndexOf('/');
-    uri.remove(parentIdx);
-    mkFullDir(uri);
+    if (parentIdx >= 0)
+    {
+        uri.remove(parentIdx);
+        if (uri.length())
+        {
+            DBG_PRINT("Recreating directory '%s'\n", uri.c_str());
+            if (!mkFullDir(uri))
+            {
+                DBG_PRINT("Error recreating directory '%s'\n", uri.c_str());
+            }
+        }
+    }
 
     if (!retVal)
     {
