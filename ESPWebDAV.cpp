@@ -887,7 +887,18 @@ void ESPWebDAVCore::handleGet(ResourceType resource, File& file, bool isGet)
         return;
     }
 
-    char buf[128]; /// XXX use stream::to(): file.to(client);
+#if defined(ARDUINO_ARCH_ESP32)
+    // file + data transfer buffer
+    constexpr size_t bufSize = 3 * TCP_MSS;
+    char* buf = (char*)malloc(bufSize);
+    if (!buf)
+        return send("500 Memory full", contentType.c_str(), "");
+#else
+    // small strings transfer buffer for small stack / heap
+    // (v3 arduino core uses Stream::send API for data transfer)
+    constexpr size_t bufSize = 128;
+    char buf[bufSize];
+#endif
 
     // Content-Range: bytes 0-1023/146515
     // Content-Length: 1024
@@ -908,7 +919,7 @@ void ESPWebDAVCore::handleGet(ResourceType resource, File& file, bool isGet)
             if (_rangeEnd >= (int)fileSize)
                 _rangeEnd = fileSize - 1;
         }
-        snprintf(buf, sizeof(buf), "bytes %d-%d/%d", _rangeStart, _rangeEnd, (int)fileSize);
+        snprintf(buf, bufSize, "bytes %d-%d/%d", _rangeStart, _rangeEnd, (int)fileSize);
         sendHeader("Content-Range", buf);
         remaining = _rangeEnd - _rangeStart + 1;
         setContentLength(remaining);
@@ -945,16 +956,14 @@ void ESPWebDAVCore::handleGet(ResourceType resource, File& file, bool isGet)
     #if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
                 #warning NOT using Stream::sendSize
     #endif
-                size_t toRead = (size_t)remaining > sizeof(buf) ? sizeof(buf) : remaining;
+                size_t toRead = (size_t)remaining > bufSize ? bufSize : remaining;
                 size_t numRead = file.read((uint8_t*)buf, toRead);
                 DBG_PRINT("read %d bytes from file", (int)numRead);
 
                 if (client->write(buf, numRead) != numRead)
                 {
                     DBG_PRINT("file->net short transfer");
-                    ///XXXX transmit error ?
-                    //return handleWriteRead("Unable to send file content", &file);
-                    break;
+                    break; // abort transfer
                 }
 #endif
 
@@ -976,6 +985,10 @@ void ESPWebDAVCore::handleGet(ResourceType resource, File& file, bool isGet)
             }
         }
     }
+
+#if defined(ARDUINO_ARCH_ESP32)
+    free(buf);
+#endif
 
     DBG_PRINT("File %zu bytes sent in: %ld sec", fileSize, (millis() - tStart) / 1000);
 }
