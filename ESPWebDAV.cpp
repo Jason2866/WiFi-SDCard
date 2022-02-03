@@ -100,7 +100,7 @@ const char *wdays[]  = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 
 #if STREAMSEND_API
 
-static decltype(F("")) streamError (Stream::Report r)
+static const __FlashStringHelper* streamError (Stream::Report r)
 {
     switch (r) {
       case Stream::Report::TimedOut: return F("Stream::send: timeout");
