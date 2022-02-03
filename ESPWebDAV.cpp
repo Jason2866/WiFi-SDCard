@@ -98,6 +98,20 @@ const char *wdays[]  = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 
 #define PROC "proc" // simple virtual file. TODO XXX real virtual fs with user callbacks
 
+#if STREAMSEND_API
+
+static decltype(F("")) streamError (Stream::Report r)
+{
+    switch (r) {
+      case Stream::Report::TimedOut: return F("Stream::send: timeout");
+      case Stream::Report::ReadError: return F("Stream::send: read error");
+      case Stream::Report::WriteError: return F("Stream::send: write error");
+      case Stream::Report::ShortOperation: return F("Stream::send: short transfer");
+      default: return F("");
+    }
+}
+
+#endif // STREAMSEND_API
 
 void ESPWebDAVCore::stripSlashes(String& name)
 {
@@ -952,7 +966,16 @@ void ESPWebDAVCore::handleGet(ResourceType resource, File& file, bool isGet)
             {
 #if STREAMSEND_API
                 size_t numRead = file.sendSize(client, 2 * TCP_MSS);
-#else
+                if (file.getLastSendReport() != Stream::Report::Success)
+                {
+                    String error;
+                    error.reserve(64);
+                    error += F("Write data failed: ");
+                    error += streamError(file.getLastSendReport());
+                    DBG_PRINT("WebDav: Get: file('%s') error: %s\n", file.name(), error.c_str());
+                    break; // abort transfer
+                }
+#else // !STREAMSEND_API
     #if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
                 #warning NOT using Stream::sendSize
     #endif
@@ -965,7 +988,7 @@ void ESPWebDAVCore::handleGet(ResourceType resource, File& file, bool isGet)
                     DBG_PRINT("file->net short transfer");
                     break; // abort transfer
                 }
-#endif
+#endif // !STREAMSEND_API
 
 #if DBG_WEBDAV
                 for (size_t i = 0; i < 80 && i < numRead; i++)
@@ -1029,7 +1052,6 @@ void ESPWebDAVCore::handlePut(ResourceType resource)
 
     if (contentLengthHeader != 0)
     {
-        uint8_t buf[128];
 #if DBG_WEBDAV
         long tStart = millis();
 #endif
@@ -1038,6 +1060,40 @@ void ESPWebDAVCore::handlePut(ResourceType resource)
         if (transferStatusFn)
             transferStatusFn(file.name(), 0, true);
         int percent = 0;
+
+#if STREAMSEND_API
+
+        while (numRemaining > 0)
+        {
+            auto sent = client->sendSize(file, std::min(numRemaining, (size_t)(2 * TCP_MSS)), HTTP_MAX_POST_WAIT);
+            if (client->getLastSendReport() != Stream::Report::Success)
+            {
+                String error;
+                error.reserve(64);
+                error += F("Write data failed: ");
+                error += streamError(client->getLastSendReport());
+                DBG_PRINT("WebDav: Put: file('%s') error: %s\n", file.name(), error.c_str());
+                return handleWriteError(error, file);
+            }
+            numRemaining -= sent;
+
+            if (transferStatusFn)
+            {
+                int p = (100 * (contentLengthHeader - numRemaining)) / contentLengthHeader;
+                if (p != percent)
+                {
+                    transferStatusFn(file.name(), percent = p, true);
+                }
+            }
+        }
+
+#else // !STREAMSEND_API
+
+    #if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
+        #warning NOT using Stream::sendSize
+    #endif
+
+        uint8_t buf[128];
 
         // read data from stream and write to the file
         while (numRemaining > 0)
@@ -1072,10 +1128,11 @@ void ESPWebDAVCore::handlePut(ResourceType resource)
                 }
             }
         }
-
         // detect timeout condition
         if (numRemaining)
             return handleWriteError("Timed out waiting for data", file);
+
+#endif // !STREAMSEND_API
 
         DBG_PRINT("File %zu bytes stored in: %ld sec", (contentLengthHeader - numRemaining), ((millis() - tStart) / 1000));
     }
