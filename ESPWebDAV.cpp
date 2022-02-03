@@ -1013,8 +1013,9 @@ void ESPWebDAVCore::handlePut(ResourceType resource)
     if (!(file = gfs->open(uri, "w")))
 #endif //ARDUINO_ARCH_ESP8266
 #if defined(ARDUINO_ARCH_ESP32)
-        String s = uri;
-    if (uri[0] != '/')s = "/" + uri;
+    String s = uri;
+    if (uri[0] != '/')
+        s = "/" + uri;
     DBG_PRINT("Create file %s", s.c_str());
     if (!(file = gfs->open(s, "w")))
 #endif //ARDUINO_ARCH_ESP32
@@ -1518,7 +1519,7 @@ bool ESPWebDAVCore::parseRequest(const String& givenMethod,
     DBG_PRINT("INPUT");
     // no new client is waiting, allow more time to current client
     m_persistent_timer_ms = millis();
-
+    // TODO always true
     m_persistent = ((millis() - m_persistent_timer_ms) < m_persistent_timer_init_ms);
 
     // reset all variables
