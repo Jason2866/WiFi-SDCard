@@ -113,6 +113,22 @@ static decltype(F("")) streamError (Stream::Report r)
 
 #endif // STREAMSEND_API
 
+#if defined(ARDUINO_ARCH_ESP32)
+    // transfer buffer
+    #define BUF_ALLOC(bufSize, error...) \
+        constexpr size_t bufSize = 3 * TCP_MSS; \
+        char* buf = (char*)malloc(bufSize); \
+        if (!buf) do { error; } while (0);
+    #define BUF_FREE() free(buf);
+#else
+    // transfer buffer for small stack / heap
+    // (esp8266 arduino core v3 should use Stream::send API for data transfer)
+    #define BUF_ALLOC(bufSize, error...) \
+        constexpr size_t bufSize = 128; \
+        char buf[bufSize];
+    #define BUF_FREE() do { (void)0; } while (0)
+#endif
+
 void ESPWebDAVCore::stripSlashes(String& name)
 {
     size_t i = 0;
@@ -901,18 +917,7 @@ void ESPWebDAVCore::handleGet(ResourceType resource, File& file, bool isGet)
         return;
     }
 
-#if defined(ARDUINO_ARCH_ESP32)
-    // file + data transfer buffer
-    constexpr size_t bufSize = 3 * TCP_MSS;
-    char* buf = (char*)malloc(bufSize);
-    if (!buf)
-        return send("500 Memory full", contentType.c_str(), "");
-#else
-    // small strings transfer buffer for small stack / heap
-    // (v3 arduino core uses Stream::send API for data transfer)
-    constexpr size_t bufSize = 128;
-    char buf[bufSize];
-#endif
+    BUF_ALLOC(bufSize, return send("500 Memory full", contentType.c_str(), ""));
 
     // Content-Range: bytes 0-1023/146515
     // Content-Length: 1024
@@ -1009,9 +1014,7 @@ void ESPWebDAVCore::handleGet(ResourceType resource, File& file, bool isGet)
         }
     }
 
-#if defined(ARDUINO_ARCH_ESP32)
-    free(buf);
-#endif
+    BUF_FREE();
 
     DBG_PRINT("File %zu bytes sent in: %ld sec", fileSize, (millis() - tStart) / 1000);
 }
@@ -1093,15 +1096,15 @@ void ESPWebDAVCore::handlePut(ResourceType resource)
         #warning NOT using Stream::sendSize
     #endif
 
-        uint8_t buf[128];
+        BUF_ALLOC(bufSize, return handleWriteError("Memory full", file));
 
         // read data from stream and write to the file
         while (numRemaining > 0)
         {
             size_t numToRead = numRemaining;
-            if (numToRead > sizeof(buf))
-                numToRead = sizeof(buf);
-            auto numRead = readBytesWithTimeout(buf, numToRead);
+            if (numToRead > bufSize)
+                numToRead = bufSize;
+            auto numRead = readBytesWithTimeout((uint8_t*)buf, numToRead);
             if (numRead == 0)
                 break;
 
@@ -1112,6 +1115,7 @@ void ESPWebDAVCore::handlePut(ResourceType resource)
                 if (numWrite == 0 || (int)numWrite == -1)
                 {
                     DBG_PRINT("error: numread=%d write=%d written=%d", (int)numRead, (int)numWrite, (int)written);
+                    BUF_FREE();
                     return handleWriteError("Write data failed", file);
                 }
                 written += numWrite;
@@ -1128,6 +1132,9 @@ void ESPWebDAVCore::handlePut(ResourceType resource)
                 }
             }
         }
+
+        BUF_FREE();
+
         // detect timeout condition
         if (numRemaining)
             return handleWriteError("Timed out waiting for data", file);
@@ -1401,27 +1408,43 @@ bool ESPWebDAVCore::copyFile(File srcFile, const String& destName)
         handleIssue(413, "Request Entity Too Large");
         return false;
     }
+
+#if STREAMSEND_API
+
+    srcFile.sendAll(dest);
+    if (srcFile.getLastSendReport() != Stream::Report::Success)
+    {
+        handleIssue(500, String(streamError(srcFile.getLastSendReport())).c_str());
+        return false;
+    }
+
+#else // !STREAMSEND_API
+
+    BUF_ALLOC(bufSize, handleIssue(500, "Memory Full"));
     while (srcFile.available())
     {
-        ///XXX USE STREAMTO
         yield();
-        char cp[128];
-        int nb = srcFile.read((uint8_t*)cp, sizeof(cp));
+        int nb = srcFile.read((uint8_t*)buf, bufSize);
         if (!nb)
         {
             DBG_PRINT("copy: short read");
+            BUF_FREE();
             handleIssue(500, "Internal Server Error");
             return false;
         }
-        int wr = dest.write((const uint8_t*)cp, nb);
+        int wr = dest.write((const uint8_t*)buf, nb);
         if (wr != nb)
         {
             DBG_PRINT("copy: short write wr=%d != rd=%d", (int)wr, (int)nb);
+            BUF_FREE();
             handleIssue(500, "Internal Server Error");
             return false;
         }
     }
-    dest.close();
+    BUF_FREE();
+
+#endif // !STREAMSEND_API
+
     return true;
 }
 
