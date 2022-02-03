@@ -892,14 +892,12 @@ void ESPWebDAVCore::handleGet(ResourceType resource, File& file, bool isGet)
     // Content-Range: bytes 0-1023/146515
     // Content-Length: 1024
 
-    constexpr bool chunked = false;
-
     int remaining;
     if (_rangeStart == 0 && (_rangeEnd < 0 || _rangeEnd == (int)fileSize - 1))
     {
         _rangeEnd = fileSize - 1;
         remaining = fileSize;
-        setContentLength(chunked ? CONTENT_LENGTH_UNKNOWN : remaining);
+        setContentLength(remaining);
         send("200 OK", contentType.c_str(), "");
     }
     else
@@ -913,20 +911,20 @@ void ESPWebDAVCore::handleGet(ResourceType resource, File& file, bool isGet)
         snprintf(buf, sizeof(buf), "bytes %d-%d/%d", _rangeStart, _rangeEnd, (int)fileSize);
         sendHeader("Content-Range", buf);
         remaining = _rangeEnd - _rangeStart + 1;
-        setContentLength(chunked ? CONTENT_LENGTH_UNKNOWN : remaining);
+        setContentLength(remaining);
         send("206 Partial Content", contentType.c_str(), "");
     }
 
     if (isGet && (internal.length() || file.seek(_rangeStart, SeekSet)))
     {
-        DBG_PRINT("GET: (%d bytes, chunked=%d, remain=%d)", remaining, chunked, remaining);
+        DBG_PRINT("GET: (%d bytes, remain=%d)", remaining, remaining);
 
         if (internal.length())
         {
+            // send virtual content
             if (transferStatusFn)
                 transferStatusFn(file.name(), (100 * _rangeStart) / fileSize, false);
-            if ((chunked && !sendContent(&internal.c_str()[_rangeStart], remaining))
-                    || (!chunked && client->write(&internal.c_str()[_rangeStart], remaining) != (size_t)remaining))
+            if (client->write(&internal.c_str()[_rangeStart], remaining) != (size_t)remaining)
             {
                 DBG_PRINT("file->net short transfer");
             }
@@ -941,18 +939,24 @@ void ESPWebDAVCore::handleGet(ResourceType resource, File& file, bool isGet)
 
             while (remaining > 0 && file.available())
             {
+#if STREAMSEND_API
+                size_t numRead = file.sendSize(client, 2 * TCP_MSS);
+#else
+    #if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
+                #warning NOT using Stream::sendSize
+    #endif
                 size_t toRead = (size_t)remaining > sizeof(buf) ? sizeof(buf) : remaining;
                 size_t numRead = file.read((uint8_t*)buf, toRead);
                 DBG_PRINT("read %d bytes from file", (int)numRead);
 
-                if ((chunked && !sendContent(buf, numRead))
-                        || (!chunked && client->write(buf, numRead) != numRead))
+                if (client->write(buf, numRead) != numRead)
                 {
                     DBG_PRINT("file->net short transfer");
                     ///XXXX transmit error ?
                     //return handleWriteRead("Unable to send file content", &file);
                     break;
                 }
+#endif
 
 #if DBG_WEBDAV
                 for (size_t i = 0; i < 80 && i < numRead; i++)
