@@ -840,7 +840,7 @@ void ESPWebDAVCore::sendPropResponse(bool isDir, const String& fullResPathFS, si
 {
     String fullResPath = fullResPathFS;
     replaceFront(fullResPath, _fsRoot, _davRoot);
-    fullResPath = c2enc(fullResPathFS);
+    fullResPath = c2enc(fullResPath);
 
     String blah;
     blah.reserve(100);
@@ -1220,7 +1220,7 @@ void ESPWebDAVCore::replaceFront (String& str, const String& from, const String&
         repl += str.c_str() + skip;
         str = repl;
         stripSlashes(str);
-        DBG_PRINT("%s\n", str.c_str());
+        DBG_PRINT("%s", str.c_str());
     }
 }
 
@@ -1875,24 +1875,30 @@ String ESPWebDAVCore::enc2c(const String& encoded)
 }
 
 
+static inline bool notEncodable (char c)
+{
+    return c > 32 && c < 127;
+}
+
 String ESPWebDAVCore::c2enc(const String& decoded)
 {
     size_t l = decoded.length();
-    for (size_t i = 0; i < decoded.length() - 2; i++)
-        if (!isalnum(decoded[i]))
+    for (size_t i = 0; i < decoded.length(); i++)
+        if (!notEncodable(decoded[i]))
             l += 2;
+
     String ret;
     ret.reserve(l);
     for (size_t i = 0; i < decoded.length(); i++)
     {
         char c = decoded[i];
-        if (isalnum(c) || c == '.' || c == '-' || c == '_')
+        if (notEncodable(c))
             ret += c;
         else
         {
             ret += '%';
-            ret += itoH(decoded[i] >> 4);
-            ret += itoH(decoded[i] & 0xf);
+            ret += itoH(c >> 4);
+            ret += itoH(c & 0xf);
         }
     }
     return ret;
