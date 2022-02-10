@@ -27,6 +27,8 @@
 
 */
 
+#include "strutils.h"
+
 #include <FS.h>
 #if defined(ARDUINO_ARCH_ESP8266) || defined(CORE_MOCK)
 #include <ESP8266WiFi.h>
@@ -76,10 +78,6 @@ const char * FileName(const char * path)
 #include <time.h>
 #include <ESPWebDAV.h>
 
-// define cal constants
-const char *months[]  = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-const char *wdays[]  = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
-
 #define ALLOW "PROPPATCH,PROPFIND,OPTIONS,DELETE" SCUNLOCK ",COPY" SCLOCK ",MOVE,HEAD,POST,PUT,GET"
 
 #if WEBDAV_LOCK_SUPPORT
@@ -128,16 +126,6 @@ static const __FlashStringHelper* streamError (Stream::Report r)
         char buf[bufSize];
     #define BUF_FREE() do { (void)0; } while (0)
 #endif
-
-void ESPWebDAVCore::stripSlashes(String& name)
-{
-    size_t i = 0;
-    while (i < name.length())
-        if (name[i] == '/' && name.length() > 1 && ((i == name.length() - 1) || name[i + 1] == '/'))
-            name.remove(i, 1);
-        else
-            i++;
-}
 
 #if WEBDAV_LOCK_SUPPORT
 
@@ -825,17 +813,6 @@ void ESPWebDAVCore::sendContentProp(const String& what, const String& response)
 }
 
 
-String ESPWebDAVCore::date2date(time_t date)
-{
-    // get & convert time to required format
-    // Tue, 13 Oct 2015 17:07:35 GMT
-    tm* gTm = gmtime(&date);
-    char buf[40];
-    snprintf(buf, sizeof(buf), "%s, %02d %s %04d %02d:%02d:%02d GMT", wdays[gTm->tm_wday], gTm->tm_mday, months[gTm->tm_mon], gTm->tm_year + 1900, gTm->tm_hour, gTm->tm_min, gTm->tm_sec);
-    return buf;
-}
-
-
 void ESPWebDAVCore::sendPropResponse(bool isDir, const String& fullResPathFS, size_t size, time_t lastWrite, time_t creationDate)
 {
     String fullResPath = fullResPathFS;
@@ -1196,33 +1173,6 @@ void ESPWebDAVCore::handleDirectoryCreate(ResourceType resource)
     send("201 Created", NULL, "");
 }
 
-
-String ESPWebDAVCore::urlToUri(const String& url)
-{
-    int index;
-    if (url.startsWith("http") && (index = url.indexOf("://")) <= 5)
-    {
-        int uriStart = url.indexOf('/', index + 3);
-        return url.substring(uriStart);
-    }
-    return url;
-}
-
-void ESPWebDAVCore::replaceFront (String& str, const String& from, const String& to)
-{
-    if (from.length() && to.length() && str.indexOf(from) == 0)
-    {
-        DBG_PRINT("replaceFront(%s, %s): %s -> ", from.c_str(), to.c_str(), str.c_str());
-        String repl;
-        repl.reserve(str.length() + to.length() - from.length() + 1);
-        repl = to;
-        size_t skip = from.length() == 1? 0: from.length();
-        repl += str.c_str() + skip;
-        str = repl;
-        stripSlashes(str);
-        DBG_PRINT("%s", str.c_str());
-    }
-}
 
 void ESPWebDAVCore::handleMove(ResourceType resource, File& src)
 {
@@ -1835,71 +1785,3 @@ void ESPWebDAVCore::processRange(const String& range)
 }
 
 
-int ESPWebDAVCore::htoi(char c)
-{
-    c = tolower(c);
-    return c >= '0' && c <= '9' ? c - '0' :
-           c >= 'a' && c <= 'f' ? c - 'a' + 10 :
-           -1;
-}
-
-
-char ESPWebDAVCore::itoH(int c)
-{
-    return c <= 9 ? c + '0' : c - 10 + 'A';
-}
-
-
-int ESPWebDAVCore::hhtoi(const char* c)
-{
-    int h = htoi(*c);
-    int l = htoi(*(c + 1));
-    return h < 0 || l < 0 ? -1 : (h << 4) + l;
-}
-
-
-String ESPWebDAVCore::enc2c(const String& encoded)
-{
-    String ret = encoded;
-    for (size_t i = 0; ret.length() >= 2 && i < ret.length() - 2; i++)
-        if (ret[i] == '%')
-        {
-            int v = hhtoi(ret.c_str() + i + 1);
-            if (v > 0)
-            {
-                ret[i] = v < 128 ? (char)v : '=';
-                ret.remove(i + 1, 2);
-            }
-        }
-    return ret;
-}
-
-
-static inline bool notEncodable (char c)
-{
-    return c > 32 && c < 127;
-}
-
-String ESPWebDAVCore::c2enc(const String& decoded)
-{
-    size_t l = decoded.length();
-    for (size_t i = 0; i < decoded.length(); i++)
-        if (!notEncodable(decoded[i]))
-            l += 2;
-
-    String ret;
-    ret.reserve(l);
-    for (size_t i = 0; i < decoded.length(); i++)
-    {
-        char c = decoded[i];
-        if (notEncodable(c))
-            ret += c;
-        else
-        {
-            ret += '%';
-            ret += itoH(c >> 4);
-            ret += itoH(c & 0xf);
-        }
-    }
-    return ret;
-}

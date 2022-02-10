@@ -48,8 +48,7 @@
 #define DBG_WEBDAV 1
 #endif
 
-#if !defined(DBG_WEBDAV) && defined(DEBUG_ESP_PORT) && !defined(NDEBUG)
-#define DBG_WEBDAV 1
+#if defined(DEBUG_ESP_PORT)
 #define DBG_WEBDAV_PORT DEBUG_ESP_PORT
 #endif
 
@@ -137,12 +136,6 @@ public:
     void setDAVRoot (const String& davRoot) { _davRoot = davRoot; }
     void setFsRoot  (const String& fsRoot)  { _fsRoot = fsRoot; }
 
-    static void stripSlashes(String& name);
-    static String date2date(time_t date);
-    static String enc2c(const String& encoded);
-    static String c2enc(const String& decoded);
-    static void replaceFront (String& str, const String& from, const String& to);
-
 protected:
 
     static int htoi(char c);
@@ -194,7 +187,6 @@ protected:
     bool getPayload(StreamString& payload);
     void stripName(String& name);
     void stripHost(String& name);
-    String urlToUri(const String& url);
 
     enum virt_e { VIRT_NONE, VIRT_PROC };
     virt_e isVirtual(const String& uri);
