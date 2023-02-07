@@ -29,7 +29,7 @@ Use Platformio ;-)
 
 ### Config
 
-First you can see our video [here](https://www.youtube.com/watch?v=YAFAK-jPcOs). You have two ways to config the module.
+First you can see our video [here](https://www.youtube.com/watch?v=2aW-65--NJk). You have two ways to config the module.
 
 *note: The card should be formatted for Fat16 or Fat32*
 
