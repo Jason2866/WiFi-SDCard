@@ -20,12 +20,12 @@ Use Platformio ;-)
 
 #### Upload
 
-1. Pulg in the USB cable to your computer
-2. Diag the switch on the module to `USB2UART`
+1. Diag the switch on the module to `USB2UART`
+2. Plug in the USB cable to your computer
 3. Press and hold the module FLSH
 4. Connect the USB cable to the module
 5. Release the module FLSH button
-6. Click the Arduino upload button
+6. Click Upload Button in VSC
 
 ### Config
 
