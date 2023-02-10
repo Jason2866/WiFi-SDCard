@@ -5,7 +5,7 @@
     "description": "WebDav server compatible with linux, macOS, windows",
     "authors": [
         { "name": "ardyesp" },
-        { "name": "d-a-v" },
+        { "name": "d-a-v" }
     ],
     "repository": { "type": "git", "url": "https://github.com/d-a-v/ESPWebDAV" },
     "frameworks": "arduino",
