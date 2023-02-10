@@ -1,0 +1,13 @@
+{
+    "name": "ESPWebDAV",
+    "version": "2.1.5",
+    "keywords": "esp8266, WebDAV",
+    "description": "WebDav server compatible with linux, macOS, windows",
+    "authors": [
+        { "name": "ardyesp" },
+        { "name": "d-a-v" },
+    ],
+    "repository": { "type": "git", "url": "https://github.com/d-a-v/ESPWebDAV" },
+    "frameworks": "arduino",
+    "platforms": "espressif8266"
+}
