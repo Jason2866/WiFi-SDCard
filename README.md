@@ -1,4 +1,4 @@
-# WebDAV server library Platformio
+# WebDAV server library
 
 This "v2" branch is a continuation of @ardyesp's [initial work](https://github.com/ardyesp/ESPWebDAV).
 <br/>(the former "v3" branch has been merged into "v2")
@@ -49,4 +49,3 @@ Also added / fixed:
 
 - implement credentials
 - test MFLN with TLS
-
