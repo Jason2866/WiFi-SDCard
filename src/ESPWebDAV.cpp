@@ -19,7 +19,7 @@ bool ESPWebDAV::init(int chipSelectPin, SPISettings spiSettings, int serverPort)
 	// start the wifi server
 	server = new WiFiServer(serverPort);
 	server->begin();
-	
+
 	// initialize the SD card
 	return sd.begin(chipSelectPin, spiSettings);
 }
@@ -62,20 +62,20 @@ void ESPWebDAV::handleReject(String rejectMessage)	{
 	// handle options
 	if(method.equals("OPTIONS"))
 		return handleOptions(RESOURCE_NONE);
-	
+
 	// handle properties
 	if(method.equals("PROPFIND"))	{
 		sendHeader("Allow", "PROPFIND,OPTIONS,DELETE,COPY,MOVE");
 		setContentLength(CONTENT_LENGTH_UNKNOWN);
 		send("207 Multi-Status", "application/xml;charset=utf-8", "");
 		sendContent(F("<?xml version=\"1.0\" encoding=\"utf-8\"?><D:multistatus xmlns:D=\"DAV:\"><D:response><D:href>/</D:href><D:propstat><D:status>HTTP/1.1 200 OK</D:status><D:prop><D:getlastmodified>Fri, 30 Nov 1979 00:00:00 GMT</D:getlastmodified><D:getetag>\"3333333333333333333333333333333333333333\"</D:getetag><D:resourcetype><D:collection/></D:resourcetype></D:prop></D:propstat></D:response>"));
-		
+
 		if(depthHeader.equals("1"))	{
 			sendContent(F("<D:response><D:href>/"));
 			sendContent(rejectMessage);
 			sendContent(F("</D:href><D:propstat><D:status>HTTP/1.1 200 OK</D:status><D:prop><D:getlastmodified>Fri, 01 Apr 2016 16:07:40 GMT</D:getlastmodified><D:getetag>\"2222222222222222222222222222222222222222\"</D:getetag><D:resourcetype/><D:getcontentlength>0</D:getcontentlength><D:getcontenttype>application/octet-stream</D:getcontenttype></D:prop></D:propstat></D:response>"));
 		}
-		
+
 		sendContent(F("</D:multistatus>"));
 		return;
 	}
@@ -110,10 +110,15 @@ void ESPWebDAV::handleRequest(String blank)	{
 	// add header that gets sent everytime
 	sendHeader("DAV", "1, 2");
 
+  // these headers are for webdavfs (https://github.com/miquels/webdavfs)
+  // pretend to be enough like Apache that we get read/write support
+  sendHeader("Server", "ESPWebDAV (use Apache put range)");
+  sendHeader("DAV", "<http://apache.org/dav/propset/fs/1>");
+
 	// handle properties
 	if(method.equals("PROPFIND"))
 		return handleProp(resource);
-	
+
 	if(method.equals("GET"))
 		return handleGet(resource, true);
 
@@ -127,17 +132,17 @@ void ESPWebDAV::handleRequest(String blank)	{
 	// handle file create/uploads
 	if(method.equals("PUT"))
 		return handlePut(resource);
-	
+
 	// handle file locks
 	if(method.equals("LOCK"))
 		return handleLock(resource);
-	
+
 	if(method.equals("UNLOCK"))
 		return handleUnlock(resource);
-	
+
 	if(method.equals("PROPPATCH"))
 		return handlePropPatch(resource);
-	
+
 	// directory creation
 	if(method.equals("MKCOL"))
 		return handleDirectoryCreate(resource);
@@ -145,7 +150,7 @@ void ESPWebDAV::handleRequest(String blank)	{
 	// move a file or directory
 	if(method.equals("MOVE"))
 		return handleMove(resource);
-	
+
 	// delete a file or directory
 	if(method.equals("DELETE"))
 		return handleDelete(resource);
@@ -170,18 +175,18 @@ void ESPWebDAV::handleOptions(ResourceType resource)	{
 void ESPWebDAV::handleLock(ResourceType resource)	{
 // ------------------------
 	DBG_PRINTLN("Processing LOCK");
-	
+
 	// does URI refer to an existing resource
 	if(resource == RESOURCE_NONE)
 		return handleNotFound();
-	
+
 	sendHeader("Allow", "PROPPATCH,PROPFIND,OPTIONS,DELETE,UNLOCK,COPY,LOCK,MOVE,HEAD,POST,PUT,GET");
 	sendHeader("Lock-Token", "urn:uuid:26e57cb3-834d-191a-00de-000042bdecf9");
 
 	size_t contentLen = contentLengthHeader.toInt();
 	uint8_t buf[1024];
 	size_t numRead = readBytesWithTimeout(buf, sizeof(buf), contentLen);
-	
+
 	if(numRead == 0)
 		return handleNotFound();
 
@@ -191,7 +196,7 @@ void ESPWebDAV::handleLock(ResourceType resource)	{
 	int endIdx = inXML.indexOf("</D:href>");
 	if(startIdx < 0 || endIdx < 0)
 		return handleNotFound();
-		
+
 	String lockUser = inXML.substring(startIdx + 8, endIdx);
 	String resp1 = F("<?xml version=\"1.0\" encoding=\"utf-8\"?><D:prop xmlns:D=\"DAV:\"><D:lockdiscovery><D:activelock><D:locktype><write/></D:locktype><D:lockscope><exclusive/></D:lockscope><D:locktoken><D:href>urn:uuid:26e57cb3-834d-191a-00de-000042bdecf9</D:href></D:locktoken><D:lockroot><D:href>");
 	String resp2 = F("</D:href></D:lockroot><D:depth>infinity</D:depth><D:owner><a:href xmlns:a=\"DAV:\">");
@@ -232,7 +237,7 @@ void ESPWebDAV::handleProp(ResourceType resource)	{
 		depth = DEPTH_CHILD;
 	else if(depthHeader.equals("infinity"))
 		depth = DEPTH_ALL;
-	
+
 	DBG_PRINT("Depth: "); DBG_PRINTLN(depth);
 
 	// does URI refer to an existing resource
@@ -349,31 +354,61 @@ void ESPWebDAV::handleGet(ResourceType resource, bool isGet)	{
 	rFile.open(uri.c_str(), O_READ);
 
 	sendHeader("Allow", "PROPFIND,OPTIONS,DELETE,COPY,MOVE,HEAD,POST,PUT,GET");
-	size_t fileSize = rFile.fileSize();
-	setContentLength(fileSize);
+ 	size_t fileSize;
+ 	if (_contentRangeStart==CONTENT_RANGE_NOT_SET && _contentRangeEnd==CONTENT_RANGE_NOT_SET)
+ 	{
+ 	  fileSize=rFile.fileSize();
+ 	}
+ 	else
+ 	{
+ 	  fileSize=_contentRangeEnd-_contentRangeStart+1;
+    sendHeader("Accept-Ranges", "bytes");
+    sendHeader("Content-Range", "bytes "+String(_contentRangeStart)+"-"+String(_contentRangeEnd)+"/"+String(rFile.fileSize()));
+ 	}
+  setContentLength(fileSize);
+
 	String contentType = getMimeType(uri);
 	if(uri.endsWith(".gz") && contentType != "application/x-gzip" && contentType != "application/octet-stream")
 		sendHeader("Content-Encoding", "gzip");
 
-	send("200 OK", contentType.c_str(), "");
+  if (!isGet)
+  	send("200 OK", contentType.c_str(), "");
 
-	if(isGet)	{
+	if(isGet)
+	{
+
 		// disable Nagle if buffer size > TCP MTU of 1460
 		// client.setNoDelay(1);
 
-		// send the file
-		while(rFile.available())	{
-			// SD read speed ~ 17sec for 4.5MB file
-			int numRead = rFile.read(buf, sizeof(buf));
-			client.write(buf, numRead);
-		}
+    if (_contentRangeStart==CONTENT_RANGE_NOT_SET && _contentRangeEnd==CONTENT_RANGE_NOT_SET)
+    {
+      send("200 OK", contentType.c_str(), "");
+  		// send the whole file
+  		while(rFile.available())
+  		{
+  			// SD read speed ~ 17sec for 4.5MB file
+  			int numRead = rFile.read(buf, sizeof(buf));
+  			client.write(buf, numRead);
+  		}
+    }
+    else
+    {
+      send("206 Partial Content", contentType.c_str(), "");
+      // send the selected range
+      rFile.seekSet(_contentRangeStart);
+      size_t remaining=fileSize;
+      while (remaining>0)
+      {
+        int numRead=rFile.read(buf, (sizeof(buf)<remaining)?sizeof(buf):remaining);
+        client.write(buf, numRead);
+        remaining-=numRead;
+      }
+    }
 	}
 
 	rFile.close();
 	DBG_PRINT("File "); DBG_PRINT(fileSize); DBG_PRINT(" bytes sent in: "); DBG_PRINT((millis() - tStart)/1000); DBG_PRINTLN(" sec");
 }
-
-
 
 
 // ------------------------
@@ -399,59 +434,98 @@ void ESPWebDAV::handlePut(ResourceType resource)	{
 	// did server send any data in put
 	size_t contentLen = contentLengthHeader.toInt();
 
-	if(contentLen != 0)	{
-		// buffer size is critical *don't change*
+	if (_contentRangeStart==CONTENT_RANGE_NOT_SET && _contentRangeEnd==CONTENT_RANGE_NOT_SET)
+	{
+		if(contentLen != 0)	{
+			// buffer size is critical *don't change*
+			const size_t WRITE_BLOCK_CONST = 512;
+			uint8_t buf[WRITE_BLOCK_CONST];
+			long tStart = millis();
+			size_t numRemaining = contentLen;
+
+			// high speed raw write implementation
+			// close any previous file
+			nFile.close();
+			// delete old file
+			sd.remove(uri.c_str());
+
+			// create a contiguous file
+			size_t contBlocks = (contentLen/WRITE_BLOCK_CONST + 1);
+			uint32_t bgnBlock, endBlock;
+
+			if (!nFile.createContiguous(sd.vwd(), uri.c_str(), contBlocks * WRITE_BLOCK_CONST))
+				return handleWriteError("File create contiguous sections failed", &nFile);
+
+			// get the location of the file's blocks
+			if (!nFile.contiguousRange(&bgnBlock, &endBlock))
+				return handleWriteError("Unable to get contiguous range", &nFile);
+
+			if (!sd.card()->writeStart(bgnBlock, contBlocks))
+				return handleWriteError("Unable to start writing contiguous range", &nFile);
+
+			// read data from stream and write to the file
+			while(numRemaining > 0)	{
+				size_t numToRead = (numRemaining > WRITE_BLOCK_CONST) ? WRITE_BLOCK_CONST : numRemaining;
+				size_t numRead = readBytesWithTimeout(buf, sizeof(buf), numToRead);
+				if(numRead == 0)
+					break;
+
+				// store whole buffer into file regardless of numRead
+				if (!sd.card()->writeData(buf))
+					return handleWriteError("Write data failed", &nFile);
+
+				// reduce the number outstanding
+				numRemaining -= numRead;
+			}
+
+			// stop writing operation
+			if (!sd.card()->writeStop())
+				return handleWriteError("Unable to stop writing contiguous range", &nFile);
+
+			// detect timeout condition
+			if(numRemaining)
+				return handleWriteError("Timed out waiting for data", &nFile);
+
+			// truncate the file to right length
+			if(!nFile.truncate(contentLen))
+				return handleWriteError("Unable to truncate the file", &nFile);
+
+			DBG_PRINT("File "); DBG_PRINT(contentLen - numRemaining); DBG_PRINT(" bytes stored in: "); DBG_PRINT((millis() - tStart)/1000); DBG_PRINTLN(" sec");
+		}
+	}
+	else
+	{
+    // reopen file so we can seek within it
+    nFile.close();
+    nFile.open(uri.c_str(), O_RDWR);
+
+		// set up buffer
 		const size_t WRITE_BLOCK_CONST = 512;
 		uint8_t buf[WRITE_BLOCK_CONST];
 		long tStart = millis();
 		size_t numRemaining = contentLen;
 
-		// high speed raw write implementation
-		// close any previous file
-		nFile.close();
-		// delete old file
-		sd.remove(uri.c_str());
-	
-		// create a contiguous file
-		size_t contBlocks = (contentLen/WRITE_BLOCK_CONST + 1);
-		uint32_t bgnBlock, endBlock;
+		// seek to beginning of range
+    nFile.seekSet(_contentRangeStart);
 
-		if (!nFile.createContiguous(sd.vwd(), uri.c_str(), contBlocks * WRITE_BLOCK_CONST))
-			return handleWriteError("File create contiguous sections failed", &nFile);
-
-		// get the location of the file's blocks
-		if (!nFile.contiguousRange(&bgnBlock, &endBlock))
-			return handleWriteError("Unable to get contiguous range", &nFile);
-
-		if (!sd.card()->writeStart(bgnBlock, contBlocks))
-			return handleWriteError("Unable to start writing contiguous range", &nFile);
-
-		// read data from stream and write to the file
-		while(numRemaining > 0)	{
+		// update file
+		while (numRemaining>0)
+		{
 			size_t numToRead = (numRemaining > WRITE_BLOCK_CONST) ? WRITE_BLOCK_CONST : numRemaining;
 			size_t numRead = readBytesWithTimeout(buf, sizeof(buf), numToRead);
 			if(numRead == 0)
 				break;
-
-			// store whole buffer into file regardless of numRead
-			if (!sd.card()->writeData(buf))
-				return handleWriteError("Write data failed", &nFile);
-
-			// reduce the number outstanding
-			numRemaining -= numRead;
+			nFile.write(buf, numRead);
+			numRemaining-=numRead;
 		}
 
-		// stop writing operation
-		if (!sd.card()->writeStop())
-			return handleWriteError("Unable to stop writing contiguous range", &nFile);
+		// close
+		if (!nFile.close())
+			return handleWriteError("Unable to close file after write", &nFile);
 
-		// detect timeout condition
-		if(numRemaining)
+		// timed out?
+		if (numRemaining)
 			return handleWriteError("Timed out waiting for data", &nFile);
-
-		// truncate the file to right length
-		if(!nFile.truncate(contentLen))
-			return handleWriteError("Unable to truncate the file", &nFile);
 
 		DBG_PRINT("File "); DBG_PRINT(contentLen - numRemaining); DBG_PRINT(" bytes stored in: "); DBG_PRINT((millis() - tStart)/1000); DBG_PRINTLN(" sec");
 	}
@@ -484,11 +558,11 @@ void ESPWebDAV::handleWriteError(String message, FatFile *wFile)	{
 void ESPWebDAV::handleDirectoryCreate(ResourceType resource)	{
 // ------------------------
 	DBG_PRINTLN("Processing MKCOL");
-	
+
 	// does URI refer to anything
 	if(resource != RESOURCE_NONE)
 		return handleNotFound();
-	
+
 	// create directory
 	if (!sd.mkdir(uri.c_str(), true)) {
 		// send error
@@ -508,16 +582,16 @@ void ESPWebDAV::handleDirectoryCreate(ResourceType resource)	{
 void ESPWebDAV::handleMove(ResourceType resource)	{
 // ------------------------
 	DBG_PRINTLN("Processing MOVE");
-	
+
 	// does URI refer to anything
 	if(resource == RESOURCE_NONE)
 		return handleNotFound();
 
 	if(destinationHeader.length() == 0)
 		return handleNotFound();
-	
+
 	String dest = urlToUri(destinationHeader);
-		
+
 	DBG_PRINT("Move destination: "); DBG_PRINTLN(dest);
 
 	// move file or directory
@@ -540,20 +614,20 @@ void ESPWebDAV::handleMove(ResourceType resource)	{
 void ESPWebDAV::handleDelete(ResourceType resource)	{
 // ------------------------
 	DBG_PRINTLN("Processing DELETE");
-	
+
 	// does URI refer to anything
 	if(resource == RESOURCE_NONE)
 		return handleNotFound();
 
 	bool retVal;
-	
+
 	if(resource == RESOURCE_FILE)
 		// delete a file
 		retVal = sd.remove(uri.c_str());
 	else
 		// delete a directory
 		retVal = sd.rmdir(uri.c_str());
-		
+
 	if(!retVal)	{
 		// send error
 		send("500 Internal Server Error", "text/plain", "Unable to delete");
